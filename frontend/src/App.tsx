@@ -1,47 +1,78 @@
-import { useState } from "react"
-import { Download } from "../wailsjs/go/main/App"
+import { useState, useEffect } from "react"
+import { Download, Cancel, SetDownloadPath } from "../wailsjs/go/main/App"
+import { EventsOn, OpenDirectoryDialog } from "../wailsjs/runtime/runtime"
 import "./App.css"
 
-type Status = {
-    type: "success" | "error" | "loading" | null
-    message: string
+type DownloadStatus = "pending" | "downloading" | "completed" | "cancelled" | "error"
+
+type DownloadItem = {
+    id: number
+    url: string
+    format: string
+    quality: string
+    status: DownloadStatus
+    progress: number
+    error?: string
 }
 
 export default function App() {
     const [url, setUrl] = useState("")
-    const [status, setStatus] = useState<Status>({ type: null, message: "" })
+    const [downloads, setDownloads] = useState<DownloadItem[]>([])
+    const [downloadPath, setDownloadPath] = useState("")
+
+    useEffect(() => {
+        const offProgress = EventsOn("download:progress", (id: number, percent: number) => {
+            setDownloads(prev =>
+                prev.map(d => (d.id === id ? { ...d, progress: percent } : d))
+            )
+        })
+
+        const offStatus = EventsOn("download:status", (id: number, status: string, error?: string) => {
+            setDownloads(prev =>
+                prev.map(d =>
+                    d.id === id ? { ...d, status: status as DownloadStatus, error } : d
+                )
+            )
+        })
+
+        return () => {
+            offProgress()
+            offStatus()
+        }
+    }, [])
 
     async function handleDownload(format: "mp3" | "mp4") {
-        if (!url.trim()) {
-            setStatus({ type: "error", message: "Por favor, pegá un link de YouTube" })
-            return
-        }
-
-        if (!url.includes("youtube.com") && !url.includes("youtu.be")) {
-            setStatus({ type: "error", message: "El link no parece ser de YouTube" })
-            return
-        }
-
-        setStatus({ type: "loading", message: `Descargando ${format.toUpperCase()}... esto puede tardar unos segundos ⏳` })
+        if (!url.trim()) return
+        if (!url.includes("youtube.com") && !url.includes("youtu.be")) return
 
         try {
-            const result = await Download(url, format)
-            if (result.success) {
-                setStatus({ type: "success", message: result.message })
-                setUrl("")
-            } else {
-                setStatus({ type: "error", message: result.message })
-            }
+            const id = await Download(url, format, "best")
+            setDownloads(prev => [
+                { id, url, format, quality: "best", status: "pending", progress: 0 },
+                ...prev,
+            ])
+            setUrl("")
         } catch {
-            setStatus({ type: "error", message: "Hubo un error al descargar. Intentá de nuevo." })
+            // status event will carry any error from the backend
         }
     }
 
-    const isLoading = status.type === "loading"
+    async function handleCancel(id: number) {
+        await Cancel(id)
+    }
+
+    async function handleSelectFolder() {
+        const path = await OpenDirectoryDialog({ Title: "Seleccionar carpeta de descargas" })
+        if (path) {
+            setDownloadPath(path)
+            await SetDownloadPath(path)
+        }
+    }
 
     return (
         <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-            <div className="w-full max-w-2xl">
+            <div className="w-full max-w-2xl flex flex-col gap-4">
+
                 {/* Main Card */}
                 <div className="bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden">
 
@@ -64,59 +95,106 @@ export default function App() {
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
                             placeholder="Pegá el link de YouTube acá..."
-                            disabled={isLoading}
-                            className="w-full px-6 py-5 text-xl bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-200 disabled:opacity-50"
+                            className="w-full px-6 py-5 text-xl bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-200"
                         />
 
                         {/* Buttons */}
                         <div className="flex gap-5">
                             <button
                                 onClick={() => handleDownload("mp3")}
-                                disabled={isLoading}
-                                className="flex-1 px-6 py-6 text-xl bg-red-600 hover:bg-red-500 disabled:bg-red-600/50 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 disabled:cursor-not-allowed"
+                                className="flex-1 px-6 py-6 text-xl bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3"
                             >
-                                {isLoading ? (
-                                    <span className="inline-block w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>Descargar MP3 🎵</>
-                                )}
+                                Descargar MP3 🎵
                             </button>
                             <button
                                 onClick={() => handleDownload("mp4")}
-                                disabled={isLoading}
-                                className="flex-1 px-6 py-6 text-xl bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-700/50 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 disabled:cursor-not-allowed"
+                                className="flex-1 px-6 py-6 text-xl bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3"
                             >
-                                {isLoading ? (
-                                    <span className="inline-block w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <>Descargar MP4 🎬</>
-                                )}
+                                Descargar MP4 🎬
                             </button>
                         </div>
-
-                        {/* Status */}
-                        {status.type && (
-                            <div className={`p-5 rounded-xl text-center text-lg font-medium ${
-                                status.type === "success"
-                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                    : status.type === "loading"
-                                        ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                        : "bg-red-500/10 text-red-400 border border-red-500/20"
-                            }`}>
-                                {status.message}
-                            </div>
-                        )}
                     </div>
 
                     {/* Footer */}
-                    <div className="px-10 py-5 bg-zinc-900/50 border-t border-zinc-800">
-                        <p className="text-center text-base text-zinc-600">
-                            📁 Tus descargas van a la carpeta Descargas
-                        </p>
+                    <div className="px-10 py-5 bg-zinc-900/50 border-t border-zinc-800 flex items-center justify-center gap-3">
+                        <button
+                            onClick={handleSelectFolder}
+                            className="text-base text-zinc-600 hover:text-zinc-400 transition-colors duration-200"
+                        >
+                            📁 Cambiar carpeta de descargas
+                        </button>
+                        {downloadPath && (
+                            <span className="text-sm text-zinc-500 truncate max-w-xs">{downloadPath}</span>
+                        )}
                     </div>
 
                 </div>
+
+                {/* Downloads list */}
+                {downloads.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                        {downloads.map(d => (
+                            <DownloadRow key={d.id} item={d} onCancel={handleCancel} />
+                        ))}
+                    </div>
+                )}
+
             </div>
+        </div>
+    )
+}
+
+function DownloadRow({ item, onCancel }: { item: DownloadItem; onCancel: (id: number) => void }) {
+    const label = item.url.length > 52 ? item.url.slice(0, 49) + "..." : item.url
+
+    const statusColor: Record<DownloadStatus, string> = {
+        pending: "text-zinc-400",
+        downloading: "text-blue-400",
+        completed: "text-emerald-400",
+        cancelled: "text-zinc-500",
+        error: "text-red-400",
+    }
+
+    const statusLabel: Record<DownloadStatus, string> = {
+        pending: "Pendiente",
+        downloading: `${item.progress}%`,
+        completed: "Completado ✓",
+        cancelled: "Cancelado",
+        error: item.error ?? "Error",
+    }
+
+    const canCancel = item.status === "pending" || item.status === "downloading"
+
+    return (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-6 py-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold text-zinc-500 uppercase shrink-0">{item.format}</span>
+                    <span className="text-sm text-zinc-300 truncate">{label}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-sm font-semibold ${statusColor[item.status]}`}>
+                        {statusLabel[item.status]}
+                    </span>
+                    {canCancel && (
+                        <button
+                            onClick={() => onCancel(item.id)}
+                            className="text-xs text-zinc-500 hover:text-red-400 transition-colors duration-200"
+                        >
+                            Cancelar
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {(item.status === "downloading" || item.status === "pending") && (
+                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-red-500 rounded-full transition-all duration-300"
+                        style={{ width: `${item.progress}%` }}
+                    />
+                </div>
+            )}
         </div>
     )
 }
