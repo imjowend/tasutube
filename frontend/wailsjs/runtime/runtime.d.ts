@@ -247,3 +247,13 @@ export function CanResolveFilePaths(): boolean;
 
 // Resolves file paths for an array of files
 export function ResolveFilePaths(files: File[]): void
+
+export interface OpenDialogOptions {
+    Title?: string;
+    DefaultDirectory?: string;
+    DefaultFilename?: string;
+    Filters?: Array<{ DisplayName: string; Pattern: string }>;
+}
+
+// Opens a native directory picker dialog and returns the selected path
+export function OpenDirectoryDialog(options?: OpenDialogOptions): Promise<string>;
