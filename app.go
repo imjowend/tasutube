@@ -27,19 +27,19 @@ type DownloadItem struct {
 }
 
 type job struct {
-	id           int
+	id                   int
 	url, format, quality string
-	ctx          context.Context
-	result       chan DownloadResult
+	ctx                  context.Context
 }
 
 type App struct {
-	ctx     context.Context
-	jobs    chan job
-	mu      sync.Mutex
-	queue   []*DownloadItem
-	nextID  int
-	cancels map[int]context.CancelFunc
+	ctx          context.Context
+	jobs         chan job
+	mu           sync.Mutex
+	queue        []*DownloadItem
+	nextID       int
+	cancels      map[int]context.CancelFunc
+	downloadPath string
 }
 
 func NewApp() *App {
@@ -59,15 +59,13 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) worker() {
 	for j := range a.jobs {
-		// El job pudo haber sido cancelado mientras esperaba en la cola
 		if j.ctx.Err() != nil {
 			a.setStatus(j.id, StatusCancelled, "")
-			j.result <- DownloadResult{false, "Descarga cancelada"}
 			continue
 		}
 
 		a.setStatus(j.id, StatusDownloading, "")
-		result := a.run(j.ctx, j.url, j.format, j.quality)
+		result := a.run(j.ctx, j.id, j.url, j.format, j.quality)
 
 		a.mu.Lock()
 		delete(a.cancels, j.id)
@@ -80,7 +78,6 @@ func (a *App) worker() {
 		} else {
 			a.setStatus(j.id, StatusError, result.Message)
 		}
-		j.result <- result
 	}
 }
 
@@ -89,9 +86,9 @@ type DownloadResult struct {
 	Message string `json:"message"`
 }
 
-func (a *App) Download(url string, format string, quality string) DownloadResult {
+func (a *App) Download(url string, format string, quality string) int {
 	if url == "" {
-		return DownloadResult{false, "Ingresá una URL"}
+		return 0
 	}
 	item := a.addItem(url, format, quality)
 
@@ -100,9 +97,14 @@ func (a *App) Download(url string, format string, quality string) DownloadResult
 	a.cancels[item.ID] = cancel
 	a.mu.Unlock()
 
-	result := make(chan DownloadResult, 1)
-	a.jobs <- job{item.ID, url, format, quality, ctx, result}
-	return <-result
+	a.jobs <- job{item.ID, url, format, quality, ctx}
+	return item.ID
+}
+
+func (a *App) SetDownloadPath(path string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.downloadPath = path
 }
 
 func (a *App) Cancel(id int) {
@@ -140,16 +142,21 @@ func (a *App) addItem(url, format, quality string) *DownloadItem {
 
 func (a *App) setStatus(id int, status Status, errMsg string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	for _, item := range a.queue {
 		if item.ID == id {
 			item.Status = status
 			item.Error = errMsg
-			return
+			break
 		}
 	}
+	a.mu.Unlock()
+	a.emitStatus(id, status, errMsg)
 }
 
-func (a *App) emitProgress(url string, percent float64) {
-	wailsruntime.EventsEmit(a.ctx, "download:progress", url, percent)
+func (a *App) emitStatus(id int, status Status, errMsg string) {
+	wailsruntime.EventsEmit(a.ctx, "download:status", id, status, errMsg)
+}
+
+func (a *App) emitProgress(id int, percent float64) {
+	wailsruntime.EventsEmit(a.ctx, "download:progress", id, percent)
 }

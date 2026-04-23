@@ -10,10 +10,20 @@ import (
 	"strings"
 )
 
-func (a *App) run(ctx context.Context, url, format, quality string) DownloadResult {
+func (a *App) getDownloadPath() string {
+	a.mu.Lock()
+	p := a.downloadPath
+	a.mu.Unlock()
+	if p != "" {
+		return p + "/%(title)s.%(ext)s"
+	}
+	return defaultDownloadPath()
+}
+
+func (a *App) run(ctx context.Context, id int, url, format, quality string) DownloadResult {
 	var args []string
 
-	outputPath := getDownloadPath()
+	outputPath := a.getDownloadPath()
 
 	if format == "mp3" {
 		args = []string{
@@ -48,7 +58,7 @@ func (a *App) run(ctx context.Context, url, format, quality string) DownloadResu
 	for scanner.Scan() {
 		line := scanner.Text()
 		if p, ok := extractPercent(line); ok {
-			a.emitProgress(url, p)
+			a.emitProgress(id, p)
 		}
 	}
 
@@ -59,7 +69,7 @@ func (a *App) run(ctx context.Context, url, format, quality string) DownloadResu
 		return DownloadResult{false, fmt.Sprintf("Error: %s", errBuf.String())}
 	}
 
-	a.emitProgress(url, 100.0)
+	a.emitProgress(id, 100.0)
 	return DownloadResult{true, "✓ Descarga completada, revisá tu carpeta Descargas"}
 }
 
@@ -103,7 +113,7 @@ func audioQuality(quality string) string {
 	}
 }
 
-func getDownloadPath() string {
+func defaultDownloadPath() string {
 	if runtime.GOOS == "windows" {
 		return "%USERPROFILE%\\Downloads\\%(title)s.%(ext)s"
 	}
