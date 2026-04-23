@@ -45,7 +45,6 @@ func (a *App) Download(url string, format string) DownloadResult {
 		args = []string{
 			"-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
 			"--merge-output-format", "mp4",
-			"--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac",
 			"-o", outputPath,
 			url,
 		}
