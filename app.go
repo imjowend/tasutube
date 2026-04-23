@@ -13,6 +13,7 @@ const (
 	StatusPending     Status = "pending"
 	StatusDownloading Status = "downloading"
 	StatusCompleted   Status = "completed"
+	StatusCancelled   Status = "cancelled"
 	StatusError       Status = "error"
 )
 
@@ -28,19 +29,24 @@ type DownloadItem struct {
 type job struct {
 	id           int
 	url, format, quality string
+	ctx          context.Context
 	result       chan DownloadResult
 }
 
 type App struct {
-	ctx    context.Context
-	jobs   chan job
-	mu     sync.Mutex
-	queue  []*DownloadItem
-	nextID int
+	ctx     context.Context
+	jobs    chan job
+	mu      sync.Mutex
+	queue   []*DownloadItem
+	nextID  int
+	cancels map[int]context.CancelFunc
 }
 
 func NewApp() *App {
-	a := &App{jobs: make(chan job, 10)}
+	a := &App{
+		jobs:    make(chan job, 10),
+		cancels: make(map[int]context.CancelFunc),
+	}
 	for i := 0; i < 3; i++ {
 		go a.worker()
 	}
@@ -53,9 +59,23 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) worker() {
 	for j := range a.jobs {
+		// El job pudo haber sido cancelado mientras esperaba en la cola
+		if j.ctx.Err() != nil {
+			a.setStatus(j.id, StatusCancelled, "")
+			j.result <- DownloadResult{false, "Descarga cancelada"}
+			continue
+		}
+
 		a.setStatus(j.id, StatusDownloading, "")
-		result := a.run(j.url, j.format, j.quality)
-		if result.Success {
+		result := a.run(j.ctx, j.url, j.format, j.quality)
+
+		a.mu.Lock()
+		delete(a.cancels, j.id)
+		a.mu.Unlock()
+
+		if j.ctx.Err() != nil {
+			a.setStatus(j.id, StatusCancelled, "")
+		} else if result.Success {
 			a.setStatus(j.id, StatusCompleted, "")
 		} else {
 			a.setStatus(j.id, StatusError, result.Message)
@@ -74,9 +94,23 @@ func (a *App) Download(url string, format string, quality string) DownloadResult
 		return DownloadResult{false, "Ingresá una URL"}
 	}
 	item := a.addItem(url, format, quality)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.mu.Lock()
+	a.cancels[item.ID] = cancel
+	a.mu.Unlock()
+
 	result := make(chan DownloadResult, 1)
-	a.jobs <- job{item.ID, url, format, quality, result}
+	a.jobs <- job{item.ID, url, format, quality, ctx, result}
 	return <-result
+}
+
+func (a *App) Cancel(id int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if cancel, ok := a.cancels[id]; ok {
+		cancel()
+	}
 }
 
 func (a *App) GetQueue() []DownloadItem {

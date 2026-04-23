@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -9,7 +10,7 @@ import (
 	"strings"
 )
 
-func (a *App) run(url, format, quality string) DownloadResult {
+func (a *App) run(ctx context.Context, url, format, quality string) DownloadResult {
 	var args []string
 
 	outputPath := getDownloadPath()
@@ -30,7 +31,7 @@ func (a *App) run(url, format, quality string) DownloadResult {
 		}
 	}
 
-	cmd := exec.Command("yt-dlp", args...)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -52,6 +53,9 @@ func (a *App) run(url, format, quality string) DownloadResult {
 	}
 
 	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return DownloadResult{false, "Descarga cancelada"}
+		}
 		return DownloadResult{false, fmt.Sprintf("Error: %s", errBuf.String())}
 	}
 
