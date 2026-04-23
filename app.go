@@ -24,7 +24,31 @@ type DownloadResult struct {
 	Message string `json:"message"`
 }
 
-func (a *App) Download(url string, format string) DownloadResult {
+func videoFormat(quality string) string {
+	switch quality {
+	case "1080p":
+		return "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best"
+	case "720p":
+		return "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"
+	case "480p":
+		return "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best"
+	default: // "auto"
+		return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+	}
+}
+
+func audioQuality(quality string) string {
+	switch quality {
+	case "media":
+		return "5"
+	case "baja":
+		return "9"
+	default: // "alta"
+		return "0"
+	}
+}
+
+func (a *App) Download(url string, format string, quality string) DownloadResult {
 	if url == "" {
 		return DownloadResult{false, "Ingresá una URL"}
 	}
@@ -37,13 +61,13 @@ func (a *App) Download(url string, format string) DownloadResult {
 		args = []string{
 			"-x",
 			"--audio-format", "mp3",
-			"--audio-quality", "0",
+			"--audio-quality", audioQuality(quality),
 			"-o", outputPath,
 			url,
 		}
 	} else {
 		args = []string{
-			"-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+			"-f", videoFormat(quality),
 			"--merge-output-format", "mp4",
 			"-o", outputPath,
 			url,
