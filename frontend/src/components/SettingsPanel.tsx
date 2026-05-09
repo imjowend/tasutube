@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { SetDownloadPath } from "../../wailsjs/go/main/App"
+import { SetDownloadPath } from "../lib/wailsBridge"
 
 interface SettingsPanelProps {
     path: string
