@@ -74,8 +74,8 @@ El ejecutable queda en `build/bin/`.
 
 ## Aviso legal
 
-Esta app es para **uso personal y privado**. Respetar los términos de servicio de YouTube y los derechos de autor del contenido descargado.
+Esta app es asd **uso personal y privado**. Respetar los términos de servicio de YouTube y los derechos de autor del contenido descargado.
 
 ---
 
-*Hecho con Go, React y mucho cariño* ❤️
+*Hecho con Go, React sdasd mucho cariño* ❤️

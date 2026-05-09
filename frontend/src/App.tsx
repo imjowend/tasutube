@@ -1,5 +1,7 @@
 import { useState } from "react"
 import { Download } from "../wailsjs/go/main/App"
+
+const DEFAULT_PATH_LABEL = "carpeta Descargas"
 import "./App.css"
 
 type Status = {
@@ -10,6 +12,7 @@ type Status = {
 export default function App() {
     const [url, setUrl] = useState("")
     const [status, setStatus] = useState<Status>({ type: null, message: "" })
+    const [downloadPath, setDownloadPath] = useState("")
 
     async function handleDownload(format: "mp3" | "mp4") {
         if (!url.trim()) {
@@ -111,7 +114,10 @@ export default function App() {
                     {/* Footer */}
                     <div className="px-10 py-5 bg-zinc-900/50 border-t border-zinc-800">
                         <p className="text-center text-base text-zinc-600">
-                            📁 Tus descargas van a la carpeta Descargas
+                            📁 Tus descargas van a{" "}
+                            <span className="text-zinc-400">
+                                {downloadPath || DEFAULT_PATH_LABEL}
+                            </span>
                         </p>
                     </div>
 
