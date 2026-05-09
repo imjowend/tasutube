@@ -30,6 +30,7 @@ declare global {
                     Cancel: (id: number) => Promise<void>
                     GetQueue: () => Promise<DownloadItem[]>
                     SetDownloadPath: (path: string) => Promise<void>
+                    OpenFolderDialog: () => Promise<string>
                 }
             }
         }
@@ -166,6 +167,9 @@ const simBridge = {
     SetDownloadPath(_path: string): Promise<void> {
         return Promise.resolve()
     },
+    OpenFolderDialog(): Promise<string> {
+        return Promise.resolve("")
+    },
     EventsOn(event: string, cb: AnyListener): () => void {
         let set = sim.listeners.get(event)
         if (!set) {
@@ -218,6 +222,13 @@ export async function SetDownloadPath(path: string): Promise<void> {
         return window.go!.main!.App!.SetDownloadPath(path)
     }
     return simBridge.SetDownloadPath(path)
+}
+
+export async function OpenFolderDialog(): Promise<string> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.OpenFolderDialog()
+    }
+    return simBridge.OpenFolderDialog()
 }
 
 /**

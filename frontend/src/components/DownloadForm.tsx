@@ -5,6 +5,7 @@ import {
     MP4_QUALITIES,
     type DownloadFormat,
 } from "../types"
+import { OpenFolderDialog, SetDownloadPath } from "../lib/wailsBridge"
 
 export type FormStatus =
     | {
@@ -19,18 +20,27 @@ interface DownloadFormProps {
     onSubmit: (url: string, format: DownloadFormat, quality: string) => Promise<void> | void
     status: FormStatus
     onUserTyping: () => void
+    downloadPath: string
+    onPathChanged: (path: string) => void
 }
 
 function isValidYoutubeUrl(url: string): boolean {
     return url.includes("youtube.com") || url.includes("youtu.be")
 }
 
-export function DownloadForm({ onSubmit, status, onUserTyping }: DownloadFormProps) {
+export function DownloadForm({
+    onSubmit,
+    status,
+    onUserTyping,
+    downloadPath,
+    onPathChanged,
+}: DownloadFormProps) {
     const [url, setUrl] = useState("")
     const [activeFormat, setActiveFormat] = useState<DownloadFormat>("mp3")
     const [mp3Quality, setMp3Quality] = useState<string>(DEFAULT_QUALITY.mp3)
     const [mp4Quality, setMp4Quality] = useState<string>(DEFAULT_QUALITY.mp4)
     const [submitting, setSubmitting] = useState(false)
+    const [picking, setPicking] = useState(false)
 
     const qualities = useMemo(
         () => (activeFormat === "mp3" ? MP3_QUALITIES : MP4_QUALITIES),
@@ -44,47 +54,95 @@ export function DownloadForm({ onSubmit, status, onUserTyping }: DownloadFormPro
     const trimmed = url.trim()
     const urlInvalid = trimmed === "" || !isValidYoutubeUrl(trimmed)
 
-    // If the URL changes, clear persistent validation banners by signalling upstream.
     useEffect(() => {
         if (status.type !== null && status.persistent) {
             onUserTyping()
         }
-        // We intentionally only react to url changes here.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [url])
 
-    async function handleClick(format: DownloadFormat) {
-        setActiveFormat(format)
-
-        if (trimmed === "") {
-            // Surface validation via parent banner system
-            onSubmit("", format, format === "mp3" ? mp3Quality : mp4Quality)
-            return
-        }
-        if (!isValidYoutubeUrl(trimmed)) {
-            onSubmit(trimmed, format, format === "mp3" ? mp3Quality : mp4Quality)
+    async function handleDownload() {
+        if (trimmed === "" || !isValidYoutubeUrl(trimmed)) {
+            onSubmit(trimmed, activeFormat, selectedQuality)
             return
         }
 
         setSubmitting(true)
         try {
-            await onSubmit(trimmed, format, format === "mp3" ? mp3Quality : mp4Quality)
+            await onSubmit(trimmed, activeFormat, selectedQuality)
             setUrl("")
         } finally {
             setSubmitting(false)
         }
     }
 
+    async function handlePickFolder() {
+        setPicking(true)
+        try {
+            const selected = await OpenFolderDialog()
+            if (selected) {
+                await SetDownloadPath(selected)
+                onPathChanged(selected)
+            }
+        } catch (err) {
+            console.error("[v0] OpenFolderDialog failed:", err)
+        } finally {
+            setPicking(false)
+        }
+    }
+
     return (
-        <div className="space-y-6">
-            {/* URL Input */}
-            <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="Pegá el link de YouTube acá..."
-                className="w-full px-6 py-5 text-xl bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-200"
-            />
+        <div className="space-y-6 flex flex-col flex-1">
+            {/* URL Input with folder icon */}
+            <div className="relative">
+                <input
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="Pegá el link de YouTube acá..."
+                    className="w-full px-6 py-5 pr-16 text-xl bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-200"
+                />
+                <button
+                    type="button"
+                    onClick={handlePickFolder}
+                    disabled={picking}
+                    title="Elegir carpeta de destino"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 inline-flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                    <FolderIcon className="w-5 h-5" />
+                </button>
+            </div>
+
+            {/* Format Selector */}
+            <div>
+                <p className="text-sm text-zinc-500 mb-2 text-left">Formato</p>
+                <div
+                    role="radiogroup"
+                    aria-label="Selector de formato"
+                    className="flex gap-2"
+                >
+                    {(["mp3", "mp4"] as DownloadFormat[]).map((fmt) => {
+                        const active = activeFormat === fmt
+                        return (
+                            <button
+                                key={fmt}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                onClick={() => setActiveFormat(fmt)}
+                                className={
+                                    "px-4 py-2 rounded-xl text-sm font-semibold border transition-all duration-150 " +
+                                    (active
+                                        ? "bg-red-600 border-red-500 text-white shadow"
+                                        : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white")
+                                }
+                            >
+                                {fmt.toUpperCase()}
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
 
             {/* Quality Selector */}
             <div>
@@ -119,23 +177,20 @@ export function DownloadForm({ onSubmit, status, onUserTyping }: DownloadFormPro
                 </div>
             </div>
 
-            {/* Buttons */}
-            <div className="flex gap-4">
-                <button
-                    onClick={() => handleClick("mp3")}
-                    disabled={urlInvalid || submitting}
-                    className="flex-1 px-6 py-5 text-lg bg-red-600 hover:bg-red-500 disabled:bg-red-600/40 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 disabled:cursor-not-allowed"
-                >
-                    Descargar MP3
-                </button>
-                <button
-                    onClick={() => handleClick("mp4")}
-                    disabled={urlInvalid || submitting}
-                    className="flex-1 px-6 py-5 text-lg bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-700/40 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 disabled:cursor-not-allowed"
-                >
-                    Descargar MP4
-                </button>
-            </div>
+            {/* Download Button */}
+            <button
+                onClick={handleDownload}
+                disabled={urlInvalid || submitting}
+                className="w-full px-6 py-5 text-lg bg-red-600 hover:bg-red-500 disabled:bg-red-600/40 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-3 disabled:cursor-not-allowed"
+            >
+                Descargar
+            </button>
+
+            {/* Destination folder */}
+            <p className="text-sm text-zinc-500 text-center">
+                📁 Guardando en:{" "}
+                <span className="text-zinc-400">{downloadPath || "carpeta Descargas"}</span>
+            </p>
 
             {/* Status banner */}
             {status.type && (
@@ -156,5 +211,18 @@ export function DownloadForm({ onSubmit, status, onUserTyping }: DownloadFormPro
                 </div>
             )}
         </div>
+    )
+}
+
+function FolderIcon({ className }: { className?: string }) {
+    return (
+        <svg
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className={className}
+            aria-hidden="true"
+        >
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+        </svg>
     )
 }

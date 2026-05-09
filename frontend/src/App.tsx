@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import "./App.css"
 import { DownloadForm, type FormStatus } from "./components/DownloadForm"
 import { QueueList } from "./components/QueueList"
-import { SettingsPanel } from "./components/SettingsPanel"
 import { useDownloadQueue } from "./hooks/useDownloadQueue"
 import type { DownloadFormat } from "./types"
-
-const DEFAULT_PATH_LABEL = "carpeta Descargas"
 
 export default function App() {
     const { items, enqueue, cancel } = useDownloadQueue()
@@ -15,8 +12,6 @@ export default function App() {
     const [downloadPath, setDownloadPath] = useState("")
     const dismissTimer = useRef<number | null>(null)
 
-    // Auto-dismiss any non-persistent banner after 3s.
-    // Validation errors are marked persistent and stay until the user starts typing again.
     useEffect(() => {
         if (dismissTimer.current) {
             window.clearTimeout(dismissTimer.current)
@@ -69,48 +64,40 @@ export default function App() {
     }
 
     function clearTransientStatus() {
-        // Called by the form when the user types: clear persistent validation errors.
-        setStatus((prev) => (prev.type !== null && prev.persistent ? { type: null, message: "" } : prev))
+        setStatus((prev) =>
+            prev.type !== null && prev.persistent ? { type: null, message: "" } : prev,
+        )
     }
 
     return (
-        <div className="min-h-screen bg-zinc-950 flex items-start justify-center p-6 font-sans">
-            <div className="w-full max-w-2xl">
-                {/* Main Card */}
-                <div className="bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl overflow-hidden">
-                    {/* Header */}
-                    <div className="px-10 pt-10 pb-8 text-center border-b border-zinc-800">
-                        <h1 className="text-6xl font-bold text-zinc-100 tracking-tight">
-                            Tasu<span className="text-red-500">Tube</span>
-                        </h1>
-                        <p className="mt-3 text-lg text-zinc-500 italic">
-                            para mi viejo, que le decía Tasu ❤️
-                        </p>
-                    </div>
+        <div className="h-screen overflow-hidden bg-zinc-950 flex items-stretch justify-center p-6 font-sans">
+            <div className="w-full max-w-5xl flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="text-center pb-5 shrink-0">
+                    <h1 className="text-5xl font-bold text-zinc-100 tracking-tight">
+                        Tasu<span className="text-red-500">Tube</span>
+                    </h1>
+                    <p className="mt-2 text-base text-zinc-500 italic">
+                        para mi viejo, que le decía Tasu ❤️
+                    </p>
+                </div>
 
-                    {/* Form */}
-                    <div className="p-10">
+                {/* Two-column layout */}
+                <div className="flex-1 flex gap-5 overflow-hidden min-h-0">
+                    {/* Left: Form */}
+                    <div className="flex-1 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl p-8 flex flex-col">
                         <DownloadForm
                             onSubmit={handleSubmit}
                             status={status}
                             onUserTyping={clearTransientStatus}
+                            downloadPath={downloadPath}
+                            onPathChanged={setDownloadPath}
                         />
                     </div>
 
-                    {/* Queue */}
-                    <QueueList items={items} onCancel={cancel} />
-
-                    {/* Settings */}
-                    <SettingsPanel path={downloadPath} onPathSaved={setDownloadPath} />
-
-                    {/* Footer */}
-                    <div className="px-10 py-5 bg-zinc-900/50 border-t border-zinc-800">
-                        <p className="text-center text-base text-zinc-600">
-                            📁 Tus descargas van a{" "}
-                            <span className="text-zinc-400">
-                                {downloadPath || DEFAULT_PATH_LABEL}
-                            </span>
-                        </p>
+                    {/* Right: Queue */}
+                    <div className="flex-1 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl p-8 flex flex-col overflow-hidden">
+                        <QueueList items={items} onCancel={cancel} />
                     </div>
                 </div>
             </div>

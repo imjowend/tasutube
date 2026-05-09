@@ -7,25 +7,30 @@ interface QueueListProps {
 }
 
 export function QueueList({ items, onCancel }: QueueListProps) {
-    if (items.length === 0) {
-        return null
-    }
-
     return (
-        <section className="px-10 py-6 border-t border-zinc-800">
-            <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex items-center justify-between mb-4 shrink-0">
                 <h2 className="text-sm font-semibold tracking-wide text-zinc-400 uppercase">
                     Descargas
                 </h2>
-                <span className="text-xs text-zinc-500">
-                    {items.length} {items.length === 1 ? "item" : "items"}
-                </span>
+                {items.length > 0 && (
+                    <span className="text-xs text-zinc-500">
+                        {items.length} {items.length === 1 ? "item" : "items"}
+                    </span>
+                )}
             </div>
-            <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {items.map((item) => (
-                    <QueueItem key={item.id} item={item} onCancel={onCancel} />
-                ))}
-            </ul>
-        </section>
+
+            {items.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                    <p className="text-sm text-zinc-600 italic">No hay descargas aún</p>
+                </div>
+            ) : (
+                <ul className="flex-1 overflow-y-auto space-y-2 pr-1">
+                    {items.map((item) => (
+                        <QueueItem key={item.id} item={item} onCancel={onCancel} />
+                    ))}
+                </ul>
+            )}
+        </div>
     )
 }

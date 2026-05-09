@@ -107,6 +107,16 @@ func (a *App) SetDownloadPath(path string) {
 	a.downloadPath = path
 }
 
+func (a *App) OpenFolderDialog() string {
+	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "Elegí la carpeta de destino",
+	})
+	if err != nil {
+		return ""
+	}
+	return path
+}
+
 func (a *App) Cancel(id int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

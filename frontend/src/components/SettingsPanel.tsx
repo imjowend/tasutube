@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-import { SetDownloadPath } from "../lib/wailsBridge"
+import { useState } from "react"
+import { OpenFolderDialog, SetDownloadPath } from "../lib/wailsBridge"
 
 interface SettingsPanelProps {
     path: string
@@ -8,36 +8,20 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ path, onPathSaved }: SettingsPanelProps) {
     const [open, setOpen] = useState(false)
-    const [draft, setDraft] = useState(path)
-    const [saving, setSaving] = useState(false)
-    const [savedAt, setSavedAt] = useState<number | null>(null)
-    const timerRef = useRef<number | null>(null)
+    const [picking, setPicking] = useState(false)
 
-    // Keep the local draft in sync if parent path changes (e.g. on first load).
-    useEffect(() => {
-        setDraft(path)
-    }, [path])
-
-    // Auto-clear the "✓ Guardado" confirmation after 2s.
-    useEffect(() => {
-        if (savedAt === null) return
-        if (timerRef.current) window.clearTimeout(timerRef.current)
-        timerRef.current = window.setTimeout(() => setSavedAt(null), 2000)
-        return () => {
-            if (timerRef.current) window.clearTimeout(timerRef.current)
-        }
-    }, [savedAt])
-
-    async function handleSave() {
-        setSaving(true)
+    async function handlePickFolder() {
+        setPicking(true)
         try {
-            await SetDownloadPath(draft)
-            onPathSaved(draft)
-            setSavedAt(Date.now())
+            const selected = await OpenFolderDialog()
+            if (selected) {
+                await SetDownloadPath(selected)
+                onPathSaved(selected)
+            }
         } catch (err) {
-            console.error("[v0] SetDownloadPath failed:", err)
+            console.error("[v0] OpenFolderDialog failed:", err)
         } finally {
-            setSaving(false)
+            setPicking(false)
         }
     }
 
@@ -58,33 +42,17 @@ export function SettingsPanel({ path, onPathSaved }: SettingsPanelProps) {
 
             {open && (
                 <div className="mt-4 space-y-2">
-                    <label
-                        htmlFor="download-path"
-                        className="block text-sm text-zinc-400 text-left"
+                    <p className="block text-sm text-zinc-400 text-left">Carpeta de destino</p>
+                    <button
+                        type="button"
+                        onClick={handlePickFolder}
+                        disabled={picking}
+                        className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-left text-sm transition-colors hover:bg-zinc-700 hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Carpeta de destino
-                    </label>
-                    <div className="flex gap-2">
-                        <input
-                            id="download-path"
-                            type="text"
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            placeholder="Por defecto: carpeta Descargas"
-                            className="flex-1 px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:border-red-500 text-sm"
-                        />
-                        <button
-                            type="button"
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:bg-red-600/40 text-white text-sm font-semibold transition-colors disabled:cursor-not-allowed"
-                        >
-                            {saving ? "Guardando…" : "Guardar"}
-                        </button>
-                    </div>
-                    {savedAt !== null && (
-                        <p className="text-xs text-emerald-400 text-left">✓ Guardado</p>
-                    )}
+                        <span className={path ? "text-zinc-100" : "text-zinc-500"}>
+                            {picking ? "Abriendo…" : path || "Elegir carpeta..."}
+                        </span>
+                    </button>
                 </div>
             )}
         </div>
