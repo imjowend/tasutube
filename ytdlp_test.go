@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestYtdlpAssetName(t *testing.T) {
@@ -145,5 +146,80 @@ func TestSelfUpdateYtdlp_MissingBinary(t *testing.T) {
 
 	if err := selfUpdateYtdlp(context.Background(), fakePath); err == nil {
 		t.Fatal("esperaba error cuando el binario no existe")
+	}
+}
+
+func TestYtdlpManager_ExistingBinary_ResolvesImmediately(t *testing.T) {
+	targetPath := filepath.Join(t.TempDir(), "yt-dlp")
+	if err := os.WriteFile(targetPath, []byte("fake binary"), 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	m := newYtdlpManagerAt(context.Background(), targetPath, "http://127.0.0.1:0/unused")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	path, err := m.resolve(ctx)
+	if err != nil {
+		t.Fatalf("resolve() error = %v", err)
+	}
+	if path != targetPath {
+		t.Errorf("resolve() path = %q, want %q", path, targetPath)
+	}
+}
+
+func TestYtdlpManager_MissingBinary_DownloadsThenResolves(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), 2*1024*1024)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(body)
+	}))
+	defer server.Close()
+
+	targetPath := filepath.Join(t.TempDir(), "bin", "yt-dlp")
+
+	m := newYtdlpManagerAt(context.Background(), targetPath, server.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	path, err := m.resolve(ctx)
+	if err != nil {
+		t.Fatalf("resolve() error = %v", err)
+	}
+	if path != targetPath {
+		t.Errorf("resolve() path = %q, want %q", path, targetPath)
+	}
+	if _, statErr := os.Stat(targetPath); statErr != nil {
+		t.Errorf("esperaba binario descargado en %q: %v", targetPath, statErr)
+	}
+}
+
+func TestYtdlpManager_DownloadFails_ResolveReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	targetPath := filepath.Join(t.TempDir(), "bin", "yt-dlp")
+
+	m := newYtdlpManagerAt(context.Background(), targetPath, server.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := m.resolve(ctx); err == nil {
+		t.Fatal("esperaba que resolve() devolviera error si falla la descarga")
+	}
+}
+
+func TestYtdlpManager_ResolveRespectsContextCancellation(t *testing.T) {
+	m := &ytdlpManager{ready: make(chan struct{})} // nunca se cierra, a propósito
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := m.resolve(ctx); err == nil {
+		t.Fatal("esperaba que resolve() devolviera error para un contexto ya cancelado")
 	}
 }

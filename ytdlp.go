@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -105,4 +106,47 @@ func selfUpdateYtdlp(ctx context.Context, path string) error {
 	cmd := exec.CommandContext(ctx, path, "-U")
 	hideWindow(cmd)
 	return cmd.Run()
+}
+
+type ytdlpManager struct {
+	path  string
+	err   error
+	ready chan struct{}
+}
+
+func newYtdlpManagerAt(ctx context.Context, targetPath, downloadURL string) *ytdlpManager {
+	m := &ytdlpManager{ready: make(chan struct{})}
+
+	if _, err := os.Stat(targetPath); err == nil {
+		m.path = targetPath
+		close(m.ready)
+
+		go func() {
+			if updateErr := selfUpdateYtdlp(context.Background(), targetPath); updateErr != nil {
+				log.Printf("yt-dlp: no se pudo autoactualizar, se sigue usando la version existente: %v", updateErr)
+			}
+		}()
+
+		return m
+	}
+
+	go func() {
+		if downloadErr := downloadYtdlp(ctx, downloadURL, targetPath); downloadErr != nil {
+			m.err = fmt.Errorf("no se pudo descargar yt-dlp: %w", downloadErr)
+		} else {
+			m.path = targetPath
+		}
+		close(m.ready)
+	}()
+
+	return m
+}
+
+func (m *ytdlpManager) resolve(ctx context.Context) (string, error) {
+	select {
+	case <-m.ready:
+		return m.path, m.err
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
