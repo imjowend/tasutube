@@ -40,12 +40,14 @@ type App struct {
 	nextID       int
 	cancels      map[int]context.CancelFunc
 	downloadPath string
+	ytdlp        *ytdlpManager
 }
 
 func NewApp() *App {
 	a := &App{
 		jobs:    make(chan job, 10),
 		cancels: make(map[int]context.CancelFunc),
+		ytdlp:   newYtdlpManager(),
 	}
 	for i := 0; i < 3; i++ {
 		go a.worker()
