@@ -42,7 +42,12 @@ func (a *App) run(ctx context.Context, id int, url, format, quality string) Down
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	ytdlpPath, err := a.ytdlp.resolve(ctx)
+	if err != nil {
+		return DownloadResult{false, "No se pudo preparar yt-dlp. Revisá tu conexión a internet."}
+	}
+
+	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
 	hideWindow(cmd)
 
 	stdout, err := cmd.StdoutPipe()
