@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,21 @@ import (
 	"testing"
 	"time"
 )
+
+// TestMain descarta la salida del paquete log estándar durante toda la
+// ejecución del binario de test. Algunas pruebas (p. ej.
+// TestYtdlpManager_ExistingBinary_ResolvesImmediately) disparan una goroutine
+// de auto-actualización en segundo plano (fire-and-forget, por diseño) que
+// falla contra un binario falso y registra el error vía log.Printf. Esa
+// goroutine puede seguir viva más allá del fin de su test y su línea de log
+// aparece de forma intercalada en la salida de un test posterior. Ninguna
+// prueba de este archivo verifica contenido logueado, así que silenciarlo acá
+// es seguro: no cambia lo que ninguna prueba comprueba, solo evita ruido
+// incidental en la salida de `go test`.
+func TestMain(m *testing.M) {
+	log.SetOutput(io.Discard)
+	os.Exit(m.Run())
+}
 
 func TestYtdlpAssetName(t *testing.T) {
 	cases := []struct {
