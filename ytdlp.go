@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -149,4 +150,19 @@ func (m *ytdlpManager) resolve(ctx context.Context) (string, error) {
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
+}
+
+func newYtdlpManager() *ytdlpManager {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		m := &ytdlpManager{ready: make(chan struct{})}
+		m.err = fmt.Errorf("no se pudo determinar el directorio de cache: %w", err)
+		close(m.ready)
+		return m
+	}
+
+	targetPath := ytdlpTargetPath(cacheDir, runtime.GOOS)
+	downloadURL := "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + ytdlpAssetName(runtime.GOOS)
+
+	return newYtdlpManagerAt(context.Background(), targetPath, downloadURL)
 }
