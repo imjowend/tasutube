@@ -11,7 +11,8 @@ import (
 // suite automatico (ver docs/superpowers/specs/2026-07-24-ytdlp-binary-manager-design.md).
 // Pega contra GitHub real y escribe en el cache real de quien lo corre.
 // Correr explicitamente con:
-//   TASUTUBE_MANUAL_YTDLP_TEST=1 go test -run TestManualYtdlpDownload -v .
+//
+//	TASUTUBE_MANUAL_YTDLP_TEST=1 go test -run TestManualYtdlpDownload -v .
 func TestManualYtdlpDownload(t *testing.T) {
 	if os.Getenv("TASUTUBE_MANUAL_YTDLP_TEST") == "" {
 		t.Skip("test manual: setear TASUTUBE_MANUAL_YTDLP_TEST=1 para correrlo contra GitHub real")
