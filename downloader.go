@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -15,7 +16,7 @@ func (a *App) getDownloadPath() string {
 	p := a.downloadPath
 	a.mu.Unlock()
 	if p != "" {
-		return p + "/%(title)s.%(ext)s"
+		return filepath.Join(p, "%(title)s.%(ext)s")
 	}
 	return defaultDownloadPath()
 }
@@ -42,6 +43,7 @@ func (a *App) run(ctx context.Context, id int, url, format, quality string) Down
 	}
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	hideWindow(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -114,8 +116,9 @@ func audioQuality(quality string) string {
 }
 
 func defaultDownloadPath() string {
-	if runtime.GOOS == "windows" {
-		return "%USERPROFILE%\\Downloads\\%(title)s.%(ext)s"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "%(title)s.%(ext)s"
 	}
-	return "~/Downloads/%(title)s.%(ext)s"
+	return filepath.Join(home, "Downloads", "%(title)s.%(ext)s")
 }
