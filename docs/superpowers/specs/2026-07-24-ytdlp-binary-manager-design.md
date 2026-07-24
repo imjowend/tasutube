@@ -55,7 +55,7 @@ Sin mutex: una única goroutine escribe `path`/`err` y lo hace *antes* de cerrar
 1. Calcula la ruta destino (función pura, parametrizada por `GOOS` y cache dir para poder testearla sin importar en qué SO corren los tests).
 2. `os.Stat()` sobre esa ruta:
    - **Existe:** setea `path` y cierra `ready` sincrónicamente (uso inmediato, sin esperas). Dispara en background una goroutine que corre `<path> -U` (self-update de yt-dlp) con `context.WithTimeout` de 30s y `hideWindow(cmd)` aplicado (reusa el helper ya existente de la fix de la consola). El resultado de esa goroutine solo se loguea (`log.Printf`); nunca toca `path`/`err` ni la UI.
-   - **No existe:** dispara una goroutine que descarga el asset correspondiente a un archivo temporal en el mismo directorio destino, valida que el tamaño sea razonable (>1MB — así se detecta si GitHub devolvió una página de error en vez del binario), le da permisos de ejecución (`os.Chmod(path, 0755)`, no-op inofensivo en Windows), y hace un rename atómico al destino final. Al terminar (éxito o error) setea `path`/`err` y cierra `ready`.
+   - **No existe:** dispara una goroutine que primero crea el directorio destino si hace falta (`os.MkdirAll(dir, 0755)` — en una instalación nueva `Tasutube/bin` todavía no existe), descarga el asset correspondiente a un archivo temporal en ese mismo directorio, valida que el tamaño sea razonable (>1MB — así se detecta si GitHub devolvió una página de error en vez del binario), le da permisos de ejecución (`os.Chmod(path, 0755)`, no-op inofensivo en Windows), y hace un rename atómico al destino final. Al terminar (éxito o error) setea `path`/`err` y cierra `ready`.
 
 ### `(m *ytdlpManager) resolve(ctx context.Context) (string, error)`
 
