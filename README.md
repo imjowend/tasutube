@@ -33,28 +33,27 @@ Aplicación de escritorio para descargar videos de YouTube en MP3 o MP4. Hecha c
 
 ## Requisitos previos
 
-Tener instalados en el sistema y disponibles en el **PATH**:
+`yt-dlp` se gestiona automáticamente: la primera vez que hace falta, la app lo descarga a `os.UserCacheDir()/Tasutube/bin/` y después se autoactualiza en cada inicio. No hace falta instalarlo a mano ni tenerlo en el PATH.
 
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp/releases)
-- [ffmpeg](https://ffmpeg.org/download.html)
+Sí hay que tener instalado y disponible en el **PATH**:
+
+- [ffmpeg](https://ffmpeg.org/download.html) — usado por yt-dlp para convertir/mezclar audio y video
 
 ### Verificar instalación
 
 ```bash
-yt-dlp --version
 ffmpeg -version
 ```
 
 ### Instalación rápida (macOS con Homebrew)
 
 ```bash
-brew install yt-dlp ffmpeg
+brew install ffmpeg
 ```
 
 ### Instalación rápida (Windows con winget)
 
 ```powershell
-winget install yt-dlp
 winget install Gyan.FFmpeg
 ```
 

@@ -182,7 +182,9 @@ Los selectores de formato priorizan streams nativos mp4+m4a para la resolución 
 
 **Parseo del progreso:** yt-dlp emite líneas como `[download]  45.3% of 10.00MiB at 1.23MiB/s ETA 00:05`. `extractPercent` identifica las líneas que contienen `[download]` y `%`, separa los campos por espacio y parsea el primer token que termina en `%` como float64.
 
-**Ruta de salida:** si el usuario configuró una carpeta mediante `SetDownloadPath`, el archivo se escribe en `<ruta>/%(title)s.%(ext)s`. En caso contrario, `defaultDownloadPath()` devuelve `~/Downloads/%(title)s.%(ext)s` (macOS/Linux) o `%USERPROFILE%\Downloads\%(title)s.%(ext)s` (Windows). yt-dlp expande `%(title)s` y `%(ext)s` al título del video y la extensión del contenedor.
+**Ruta de salida:** si el usuario configuró una carpeta mediante `SetDownloadPath`, el archivo se escribe en `filepath.Join(<ruta>, "%(title)s.%(ext)s")`. En caso contrario, `defaultDownloadPath()` usa `os.UserHomeDir()` + `filepath.Join(home, "Downloads", "%(title)s.%(ext)s")` — una ruta ya resuelta por Go, no un placeholder de entorno como `%USERPROFILE%` que yt-dlp no expande. yt-dlp expande `%(title)s` y `%(ext)s` al título del video y la extensión del contenedor.
+
+**Binario de yt-dlp:** ya no depende de una instalación global en el PATH. `ytdlpManager` (`ytdlp.go`) lo descarga a `os.UserCacheDir()/Tasutube/bin/` la primera vez que hace falta, y lo autoactualiza (`yt-dlp -U`) en background en cada inicio si ya existe. Ver `docs/superpowers/specs/2026-07-24-ytdlp-binary-manager-design.md` para el diseño completo.
 
 ### Diálogo nativo de carpetas
 
