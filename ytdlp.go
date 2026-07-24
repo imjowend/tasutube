@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -95,4 +96,13 @@ func downloadYtdlp(ctx context.Context, url, destPath string) error {
 	}
 
 	return nil
+}
+
+func selfUpdateYtdlp(ctx context.Context, path string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, path, "-U")
+	hideWindow(cmd)
+	return cmd.Run()
 }

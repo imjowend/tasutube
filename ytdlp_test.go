@@ -139,3 +139,11 @@ func TestDownloadYtdlp_TooSmall(t *testing.T) {
 		t.Errorf("esperaba que el archivo temporal se limpiara")
 	}
 }
+
+func TestSelfUpdateYtdlp_MissingBinary(t *testing.T) {
+	fakePath := filepath.Join(t.TempDir(), "no-such-binary")
+
+	if err := selfUpdateYtdlp(context.Background(), fakePath); err == nil {
+		t.Fatal("esperaba error cuando el binario no existe")
+	}
+}
