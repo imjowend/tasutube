@@ -64,7 +64,7 @@ winget install Gyan.FFmpeg
 ### Requisitos
 
 - Go 1.23+
-- Node.js 18+
+- Node.js 18+ (con `pnpm`)
 - [Wails CLI v2](https://wails.io/docs/gettingstarted/installation)
 
 ```bash
