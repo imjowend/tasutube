@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { OpenDownloadedFile, OpenFolder } from "../lib/wailsBridge"
 import { qualityLabel, type DownloadItemWithProgress } from "../types"
 
 interface QueueItemProps {

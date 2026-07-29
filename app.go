@@ -2,7 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"tasutube/internal/autostart"
+	"tasutube/internal/downloader"
+	"tasutube/internal/ytdlp"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -18,12 +27,13 @@ const (
 )
 
 type DownloadItem struct {
-	ID      int    `json:"id"`
-	URL     string `json:"url"`
-	Format  string `json:"format"`
-	Quality string `json:"quality"`
-	Status  Status `json:"status"`
-	Error   string `json:"error,omitempty"`
+	ID       int    `json:"id"`
+	URL      string `json:"url"`
+	Format   string `json:"format"`
+	Quality  string `json:"quality"`
+	Status   Status `json:"status"`
+	Error    string `json:"error,omitempty"`
+	FilePath string `json:"filePath,omitempty"`
 }
 
 type job struct {
@@ -40,14 +50,14 @@ type App struct {
 	nextID       int
 	cancels      map[int]context.CancelFunc
 	downloadPath string
-	ytdlp        *ytdlpManager
+	ytdlp        *ytdlp.Manager
 }
 
 func NewApp() *App {
 	a := &App{
 		jobs:    make(chan job, 10),
 		cancels: make(map[int]context.CancelFunc),
-		ytdlp:   newYtdlpManager(),
+		ytdlp:   ytdlp.NewManager(),
 	}
 	for i := 0; i < 3; i++ {
 		go a.worker()
@@ -62,30 +72,29 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) worker() {
 	for j := range a.jobs {
 		if j.ctx.Err() != nil {
-			a.setStatus(j.id, StatusCancelled, "")
+			a.setStatus(j.id, StatusCancelled, "", "")
 			continue
 		}
 
-		a.setStatus(j.id, StatusDownloading, "")
-		result := a.run(j.ctx, j.id, j.url, j.format, j.quality)
+		a.setStatus(j.id, StatusDownloading, "", "")
+		a.mu.Lock()
+		dlPath := a.downloadPath
+		a.mu.Unlock()
+
+		result := downloader.RunDownload(j.ctx, j.id, j.url, j.format, j.quality, dlPath, a.ytdlp, a.emitProgress)
 
 		a.mu.Lock()
 		delete(a.cancels, j.id)
 		a.mu.Unlock()
 
 		if j.ctx.Err() != nil {
-			a.setStatus(j.id, StatusCancelled, "")
+			a.setStatus(j.id, StatusCancelled, "", "")
 		} else if result.Success {
-			a.setStatus(j.id, StatusCompleted, "")
+			a.setStatus(j.id, StatusCompleted, "", result.FilePath)
 		} else {
-			a.setStatus(j.id, StatusError, result.Message)
+			a.setStatus(j.id, StatusError, result.Message, "")
 		}
 	}
-}
-
-type DownloadResult struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
 }
 
 func (a *App) Download(url string, format string, quality string) int {
@@ -103,10 +112,104 @@ func (a *App) Download(url string, format string, quality string) int {
 	return item.ID
 }
 
+func (a *App) GetDownloadPath() string {
+	a.mu.Lock()
+	p := a.downloadPath
+	a.mu.Unlock()
+	if p != "" {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Downloads")
+}
+
 func (a *App) SetDownloadPath(path string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.downloadPath = path
+}
+
+func (a *App) OpenFolder(path string) error {
+	target := strings.TrimSpace(path)
+	if target == "" {
+		target = a.GetDownloadPath()
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		target = filepath.Clean(target)
+		fi, err := os.Stat(target)
+		var cmd *exec.Cmd
+		if err == nil && !fi.IsDir() {
+			cmd = exec.Command("explorer", "/select,", target)
+		} else {
+			cmd = exec.Command("explorer", target)
+		}
+		downloader.HideWindow(cmd)
+		return cmd.Start()
+	case "darwin":
+		cmd := exec.Command("open", target)
+		return cmd.Run()
+	default:
+		fi, err := os.Stat(target)
+		if err == nil && !fi.IsDir() {
+			target = filepath.Dir(target)
+		}
+		cmd := exec.Command("xdg-open", target)
+		return cmd.Run()
+	}
+}
+
+func (a *App) OpenDownloadedFile(filePath string) error {
+	target := strings.TrimSpace(filePath)
+	if target == "" {
+		return fmt.Errorf("ruta invalida")
+	}
+
+	switch runtime.GOOS {
+	case "windows":
+		target = filepath.Clean(target)
+		cmd := exec.Command("cmd", "/c", "start", "", target)
+		downloader.HideWindow(cmd)
+		return cmd.Start()
+	case "darwin":
+		cmd := exec.Command("open", target)
+		return cmd.Run()
+	default:
+		cmd := exec.Command("xdg-open", target)
+		return cmd.Run()
+	}
+}
+
+func (a *App) ForceUpdateYtdlp() (string, error) {
+	if err := a.ytdlp.ForceRedownload(a.ctx); err != nil {
+		return "", err
+	}
+	return "✓ yt-dlp fue actualizado a la última versión desde GitHub Releases.", nil
+}
+
+func (a *App) GetVideoInfo(url string) (*downloader.VideoMetadata, error) {
+	return downloader.FetchVideoMetadata(a.ctx, url, a.ytdlp)
+}
+
+func (a *App) SetAutostart(enabled bool) error {
+	return autostart.SetEnabled(enabled)
+}
+
+func (a *App) IsAutostartEnabled() bool {
+	return autostart.IsEnabled()
+}
+
+func (a *App) SetWindowSize(width, height int) {
+	wailsruntime.WindowSetSize(a.ctx, width, height)
+}
+
+func (a *App) GetWindowSize() map[string]int {
+	w, h := wailsruntime.WindowGetSize(a.ctx)
+	return map[string]int{"width": w, "height": h}
 }
 
 func (a *App) OpenFolderDialog() string {
@@ -152,21 +255,24 @@ func (a *App) addItem(url, format, quality string) *DownloadItem {
 	return item
 }
 
-func (a *App) setStatus(id int, status Status, errMsg string) {
+func (a *App) setStatus(id int, status Status, errMsg string, filePath string) {
 	a.mu.Lock()
 	for _, item := range a.queue {
 		if item.ID == id {
 			item.Status = status
 			item.Error = errMsg
+			if filePath != "" {
+				item.FilePath = filePath
+			}
 			break
 		}
 	}
 	a.mu.Unlock()
-	a.emitStatus(id, status, errMsg)
+	a.emitStatus(id, status, errMsg, filePath)
 }
 
-func (a *App) emitStatus(id int, status Status, errMsg string) {
-	wailsruntime.EventsEmit(a.ctx, "download:status", id, status, errMsg)
+func (a *App) emitStatus(id int, status Status, errMsg string, filePath string) {
+	wailsruntime.EventsEmit(a.ctx, "download:status", id, status, errMsg, filePath)
 }
 
 func (a *App) emitProgress(id int, percent float64) {

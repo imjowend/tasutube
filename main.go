@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"os"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -12,14 +14,21 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
+	startHidden := false
+	for _, arg := range os.Args {
+		if strings.Contains(arg, "--autostart") {
+			startHidden = true
+			break
+		}
+	}
+
 	app := NewApp()
 
-	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "tasutube",
-		Width:  1024,
-		Height: 768,
+		Title:       "TasuTube",
+		Width:       1600,
+		Height:      900,
+		StartHidden: startHidden,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

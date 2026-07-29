@@ -10,14 +10,50 @@ export function Download(arg1, arg2, arg3) {
   return window['go']['main']['App']['Download'](arg1, arg2, arg3);
 }
 
+export function ForceUpdateYtdlp() {
+  return window['go']['main']['App']['ForceUpdateYtdlp']();
+}
+
+export function GetDownloadPath() {
+  return window['go']['main']['App']['GetDownloadPath']();
+}
+
 export function GetQueue() {
   return window['go']['main']['App']['GetQueue']();
+}
+
+export function GetVideoInfo(arg1) {
+  return window['go']['main']['App']['GetVideoInfo'](arg1);
+}
+
+export function GetWindowSize() {
+  return window['go']['main']['App']['GetWindowSize']();
+}
+
+export function IsAutostartEnabled() {
+  return window['go']['main']['App']['IsAutostartEnabled']();
+}
+
+export function OpenDownloadedFile(arg1) {
+  return window['go']['main']['App']['OpenDownloadedFile'](arg1);
+}
+
+export function OpenFolder(arg1) {
+  return window['go']['main']['App']['OpenFolder'](arg1);
 }
 
 export function OpenFolderDialog() {
   return window['go']['main']['App']['OpenFolderDialog']();
 }
 
+export function SetAutostart(arg1) {
+  return window['go']['main']['App']['SetAutostart'](arg1);
+}
+
 export function SetDownloadPath(arg1) {
   return window['go']['main']['App']['SetDownloadPath'](arg1);
+}
+
+export function SetWindowSize(arg1, arg2) {
+  return window['go']['main']['App']['SetWindowSize'](arg1, arg2);
 }

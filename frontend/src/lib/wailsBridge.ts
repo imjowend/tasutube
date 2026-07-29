@@ -11,9 +11,9 @@
  * shell.
  */
 
-import type { DownloadFormat, DownloadItem, DownloadStatus } from "../types"
+import type { DownloadFormat, DownloadItem, DownloadStatus, VideoMetadata } from "../types"
 
-type StatusListener = (id: number, status: string, errMsg: string) => void
+type StatusListener = (id: number, status: string, errMsg: string, filePath?: string) => void
 type ProgressListener = (id: number, percent: number) => void
 type AnyListener = StatusListener | ProgressListener
 
@@ -29,8 +29,17 @@ declare global {
                     ) => Promise<number>
                     Cancel: (id: number) => Promise<void>
                     GetQueue: () => Promise<DownloadItem[]>
+                    GetDownloadPath: () => Promise<string>
                     SetDownloadPath: (path: string) => Promise<void>
                     OpenFolderDialog: () => Promise<string>
+                    OpenFolder: (path?: string) => Promise<void>
+                    OpenDownloadedFile: (filePath: string) => Promise<void>
+                    ForceUpdateYtdlp: () => Promise<string>
+                    SetAutostart: (enabled: boolean) => Promise<void>
+                    IsAutostartEnabled: () => Promise<boolean>
+                    SetWindowSize: (width: number, height: number) => Promise<void>
+                    GetWindowSize: () => Promise<{ width: number; height: number }>
+                    GetVideoInfo: (url: string) => Promise<VideoMetadata>
                 }
             }
         }
@@ -63,6 +72,9 @@ const sim = {
     nextId: 1,
     queue: new Map<number, SimItem>(),
     listeners: new Map<string, Set<AnyListener>>(),
+    autostart: false,
+    winWidth: 1600,
+    winHeight: 900,
 }
 
 function simEmit(event: string, ...args: unknown[]) {
@@ -78,12 +90,13 @@ function simEmit(event: string, ...args: unknown[]) {
     })
 }
 
-function simSetStatus(id: number, status: DownloadStatus, error?: string) {
+function simSetStatus(id: number, status: DownloadStatus, error?: string, filePath?: string) {
     const item = sim.queue.get(id)
     if (!item) return
     item.status = status
     item.error = error
-    simEmit("download:status", id, status, error ?? "")
+    if (filePath) item.filePath = filePath
+    simEmit("download:status", id, status, error ?? "", filePath ?? "")
 }
 
 function simStartDownload(id: number) {
@@ -116,7 +129,7 @@ function simStartDownload(id: number) {
                     if (!current || current.status !== "downloading") return
                     window.clearInterval(interval)
                     simEmit("download:progress", id, 100)
-                    simSetStatus(id, "completed")
+                    simSetStatus(id, "completed", undefined, "C:\\Users\\Joaquin\\Downloads\\video.mp4")
                 }, 3500),
             )
         }, 250),
@@ -144,8 +157,6 @@ const simBridge = {
             status: "pending",
             timers: [],
         })
-        // Emit the initial pending status on the next tick so subscribers that
-        // register synchronously after Download() resolves still receive it.
         window.setTimeout(() => simEmit("download:status", id, "pending", ""), 0)
         simStartDownload(id)
         return Promise.resolve(id)
@@ -164,11 +175,50 @@ const simBridge = {
             Array.from(sim.queue.values()).map(({ timers: _t, ...rest }) => rest),
         )
     },
+    GetDownloadPath(): Promise<string> {
+        return Promise.resolve("C:\\Users\\Joaquin\\Downloads")
+    },
     SetDownloadPath(_path: string): Promise<void> {
         return Promise.resolve()
     },
     OpenFolderDialog(): Promise<string> {
         return Promise.resolve("")
+    },
+    OpenFolder(_path?: string): Promise<void> {
+        return Promise.resolve()
+    },
+    OpenDownloadedFile(_filePath: string): Promise<void> {
+        return Promise.resolve()
+    },
+    ForceUpdateYtdlp(): Promise<string> {
+        return Promise.resolve("✓ yt-dlp fue actualizado a la última versión desde GitHub Releases.")
+    },
+    SetAutostart(enabled: boolean): Promise<void> {
+        sim.autostart = enabled
+        return Promise.resolve()
+    },
+    IsAutostartEnabled(): Promise<boolean> {
+        return Promise.resolve(sim.autostart)
+    },
+    SetWindowSize(w: number, h: number): Promise<void> {
+        sim.winWidth = w
+        sim.winHeight = h
+        return Promise.resolve()
+    },
+    GetWindowSize(): Promise<{ width: number; height: number }> {
+        return Promise.resolve({ width: sim.winWidth, height: sim.winHeight })
+    },
+    GetVideoInfo(_url: string): Promise<VideoMetadata> {
+        return Promise.resolve({
+            title: "YouTube Video de Ejemplo (1080p 60fps)",
+            thumbnail: "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+            duration: 212,
+            maxHeight: 1080,
+            availableRes: [1080, 720, 480, 360],
+            maxAudioBitrate: 160,
+            audioCodec: "opus",
+            sampleRate: 48000,
+        })
     },
     EventsOn(event: string, cb: AnyListener): () => void {
         let set = sim.listeners.get(event)
@@ -217,6 +267,13 @@ export async function GetQueue(): Promise<DownloadItem[]> {
     return simBridge.GetQueue()
 }
 
+export async function GetDownloadPath(): Promise<string> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.GetDownloadPath()
+    }
+    return simBridge.GetDownloadPath()
+}
+
 export async function SetDownloadPath(path: string): Promise<void> {
     if (hasWailsApp()) {
         return window.go!.main!.App!.SetDownloadPath(path)
@@ -231,6 +288,63 @@ export async function OpenFolderDialog(): Promise<string> {
     return simBridge.OpenFolderDialog()
 }
 
+export async function OpenFolder(path?: string): Promise<void> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.OpenFolder(path ?? "")
+    }
+    return simBridge.OpenFolder(path)
+}
+
+export async function OpenDownloadedFile(filePath: string): Promise<void> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.OpenDownloadedFile(filePath)
+    }
+    return simBridge.OpenDownloadedFile(filePath)
+}
+
+export async function ForceUpdateYtdlp(): Promise<string> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.ForceUpdateYtdlp()
+    }
+    return simBridge.ForceUpdateYtdlp()
+}
+
+export async function SetAutostart(enabled: boolean): Promise<void> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.SetAutostart(enabled)
+    }
+    return simBridge.SetAutostart(enabled)
+}
+
+export async function IsAutostartEnabled(): Promise<boolean> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.IsAutostartEnabled()
+    }
+    return simBridge.IsAutostartEnabled()
+}
+
+export async function SetWindowSize(width: number, height: number): Promise<void> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.SetWindowSize(width, height)
+    }
+    return simBridge.SetWindowSize(width, height)
+}
+
+export async function GetWindowSize(): Promise<{ width: number; height: number }> {
+    if (hasWailsApp()) {
+        const res = await window.go!.main!.App!.GetWindowSize()
+        return res ?? { width: window.innerWidth, height: window.innerHeight }
+    }
+    return simBridge.GetWindowSize()
+}
+
+export async function GetVideoInfo(url: string): Promise<VideoMetadata> {
+    if (hasWailsApp()) {
+        return window.go!.main!.App!.GetVideoInfo(url)
+    }
+    return simBridge.GetVideoInfo(url)
+}
+
 /**
  * Subscribe to a backend event. Returns an unsubscribe function.
  * Falls back to the in-memory simulator when the Wails runtime is missing.
@@ -238,7 +352,6 @@ export async function OpenFolderDialog(): Promise<string> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function EventsOn(eventName: string, callback: (...args: any[]) => void): () => void {
     if (hasWailsRuntime()) {
-        // The real Wails EventsOn returns an unsubscribe fn.
         const off = window.runtime!.EventsOn(eventName, callback)
         if (typeof off === "function") return off
         return () => {

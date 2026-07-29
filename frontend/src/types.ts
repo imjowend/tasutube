@@ -7,6 +7,17 @@ export type DownloadStatus =
     | "cancelled"
     | "error"
 
+export interface VideoMetadata {
+    title: string
+    thumbnail: string
+    duration: number
+    maxHeight: number
+    availableRes: number[]
+    maxAudioBitrate: number
+    audioCodec: string
+    sampleRate: number
+}
+
 export interface DownloadItem {
     id: number
     url: string
@@ -14,6 +25,7 @@ export interface DownloadItem {
     quality: string
     status: DownloadStatus
     error?: string
+    filePath?: string
 }
 
 export interface DownloadItemWithProgress extends DownloadItem {
@@ -24,9 +36,9 @@ export interface DownloadItemWithProgress extends DownloadItem {
 }
 
 export const MP3_QUALITIES = [
-    { value: "alta", label: "Alta" },
-    { value: "media", label: "Media" },
-    { value: "baja", label: "Baja" },
+    { value: "alta", label: "Alta (320k)" },
+    { value: "media", label: "Media (192k)" },
+    { value: "baja", label: "Baja (128k)" },
 ] as const
 
 export const MP4_QUALITIES = [
