@@ -6,20 +6,9 @@ import (
 	"strings"
 )
 
-var allowedHosts = map[string]bool{
-	"youtube.com":              true,
-	"www.youtube.com":          true,
-	"m.youtube.com":            true,
-	"music.youtube.com":        true,
-	"youtu.be":                 true,
-	"www.youtu.be":             true,
-	"youtube-nocookie.com":     true,
-	"www.youtube-nocookie.com": true,
-}
-
-// ValidateURL acepta únicamente URLs http(s) de YouTube. Evita que un valor
-// arbitrario llegue a yt-dlp como opción de línea de comandos o como esquema
-// de archivo local.
+// ValidateURL exige que la entrada sea una URL http(s) sin caracteres de
+// control. Evita que un valor arbitrario llegue a yt-dlp como opción de línea
+// de comandos (por ejemplo `--exec`) o como esquema de archivo local.
 func ValidateURL(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -36,10 +25,8 @@ func ValidateURL(raw string) (string, error) {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", fmt.Errorf("solo se admiten URLs http o https")
 	}
-
-	host := strings.ToLower(parsed.Hostname())
-	if !allowedHosts[host] {
-		return "", fmt.Errorf("solo se admiten URLs de YouTube")
+	if parsed.Host == "" {
+		return "", fmt.Errorf("URL inválida")
 	}
 
 	return trimmed, nil

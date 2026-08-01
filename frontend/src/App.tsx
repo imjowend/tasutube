@@ -6,6 +6,7 @@ import { QueueList } from "./components/QueueList"
 import { SettingsPanel } from "./components/SettingsPanel"
 import { useDownloadQueue } from "./hooks/useDownloadQueue"
 import { errorMessage } from "./lib/errors"
+import { isValidYoutubeUrl } from "./lib/youtube"
 import { DEFAULT_QUALITY, type DownloadFormat, type VideoMetadata } from "./types"
 
 export default function App() {
@@ -56,7 +57,7 @@ export default function App() {
             })
             return
         }
-        if (!submittedUrl.includes("youtube.com") && !submittedUrl.includes("youtu.be")) {
+        if (!isValidYoutubeUrl(submittedUrl)) {
             setStatus({
                 type: "error",
                 message: "El link no parece ser de YouTube",

@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"tasutube/internal/autostart"
 	"tasutube/internal/downloader"
+	"tasutube/internal/opener"
+	"tasutube/internal/userpath"
 	"tasutube/internal/ytdlp"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -55,10 +54,14 @@ type App struct {
 }
 
 func NewApp() *App {
+	return newAppWithYtdlp(ytdlp.NewManager())
+}
+
+func newAppWithYtdlp(mgr *ytdlp.Manager) *App {
 	a := &App{
 		jobs:    make(chan job, 10),
 		cancels: make(map[int]context.CancelFunc),
-		ytdlp:   ytdlp.NewManager(),
+		ytdlp:   mgr,
 	}
 	for i := 0; i < 3; i++ {
 		go a.worker()
@@ -130,11 +133,7 @@ func (a *App) GetDownloadPath() (string, error) {
 	if p != "" {
 		return p, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("no se pudo determinar la carpeta del usuario: %w", err)
-	}
-	return filepath.Join(home, "Downloads"), nil
+	return userpath.DownloadsDir()
 }
 
 func (a *App) SetDownloadPath(path string) {
@@ -152,51 +151,7 @@ func (a *App) OpenFolder(path string) error {
 		}
 		target = defaultPath
 	}
-
-	switch runtime.GOOS {
-	case "windows":
-		target = filepath.Clean(target)
-		fi, err := os.Stat(target)
-		var cmd *exec.Cmd
-		if err == nil && !fi.IsDir() {
-			cmd = exec.Command("explorer", "/select,", target)
-		} else {
-			cmd = exec.Command("explorer", target)
-		}
-		downloader.HideWindow(cmd)
-		return startOpener(cmd, target)
-	case "darwin":
-		return runOpener(exec.Command("open", target), target)
-	default:
-		fi, err := os.Stat(target)
-		if err == nil && !fi.IsDir() {
-			target = filepath.Dir(target)
-		}
-		return runOpener(exec.Command("xdg-open", target), target)
-	}
-}
-
-// startOpener lanza el explorador del sistema sin esperar a que termine,
-// devolviendo un error con contexto si el proceso no pudo arrancar.
-func startOpener(cmd *exec.Cmd, target string) error {
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("no se pudo abrir %q: %w", target, err)
-	}
-	return nil
-}
-
-// runOpener ejecuta un comando del explorador de archivos del sistema y
-// devuelve un error que incluye la salida de error del comando.
-func runOpener(cmd *exec.Cmd, target string) error {
-	var errBuf strings.Builder
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		if detail := strings.TrimSpace(errBuf.String()); detail != "" {
-			return fmt.Errorf("no se pudo abrir %q: %w: %s", target, err, detail)
-		}
-		return fmt.Errorf("no se pudo abrir %q: %w", target, err)
-	}
-	return nil
+	return opener.Reveal(target)
 }
 
 func (a *App) OpenDownloadedFile(filePath string) error {
@@ -210,17 +165,7 @@ func (a *App) OpenDownloadedFile(filePath string) error {
 		return fmt.Errorf("ruta invalida")
 	}
 
-	switch runtime.GOOS {
-	case "windows":
-		target = filepath.Clean(target)
-		cmd := exec.Command("cmd", "/c", "start", "", target)
-		downloader.HideWindow(cmd)
-		return startOpener(cmd, target)
-	case "darwin":
-		return runOpener(exec.Command("open", target), target)
-	default:
-		return runOpener(exec.Command("xdg-open", target), target)
-	}
+	return opener.Open(target)
 }
 
 func (a *App) ForceUpdateYtdlp() (string, error) {

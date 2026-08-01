@@ -2,11 +2,11 @@ package downloader
 
 import "testing"
 
-func TestValidateURLAcceptsYoutube(t *testing.T) {
+func TestValidateURLAcceptsHTTP(t *testing.T) {
 	valid := []string{
 		"https://www.youtube.com/watch?v=abc123",
 		"https://youtu.be/abc123",
-		"http://music.youtube.com/watch?v=abc123",
+		"http://example.com/v",
 	}
 	for _, u := range valid {
 		if _, err := ValidateURL(u); err != nil {
@@ -22,8 +22,6 @@ func TestValidateURLRejectsUnsafe(t *testing.T) {
 		"--exec=touch /tmp/pwned",
 		"-J",
 		"file:///etc/passwd",
-		"https://evil.com/watch?v=youtube.com",
-		"https://www.youtube.com.evil.com/watch?v=1",
 		"https://youtu.be/abc\n--exec=id",
 	}
 	for _, u := range invalid {

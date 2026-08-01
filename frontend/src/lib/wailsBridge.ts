@@ -17,30 +17,29 @@ type StatusListener = (id: number, status: string, errMsg: string, filePath?: st
 type ProgressListener = (id: number, percent: number) => void
 type AnyListener = StatusListener | ProgressListener
 
+/** Métodos que expone el backend Go, tanto en Wails como en el simulador. */
+export interface WailsApp {
+    Download: (url: string, format: string, quality: string) => Promise<number>
+    Cancel: (id: number) => Promise<void>
+    GetQueue: () => Promise<DownloadItem[]>
+    GetDownloadPath: () => Promise<string>
+    SetDownloadPath: (path: string) => Promise<void>
+    OpenFolderDialog: () => Promise<string>
+    OpenFolder: (path?: string) => Promise<void>
+    OpenDownloadedFile: (filePath: string) => Promise<void>
+    ForceUpdateYtdlp: () => Promise<string>
+    SetAutostart: (enabled: boolean) => Promise<void>
+    IsAutostartEnabled: () => Promise<boolean>
+    SetWindowSize: (width: number, height: number) => Promise<void>
+    GetWindowSize: () => Promise<{ width: number; height: number }>
+    GetVideoInfo: (url: string) => Promise<VideoMetadata>
+}
+
 declare global {
     interface Window {
         go?: {
             main?: {
-                App?: {
-                    Download: (
-                        url: string,
-                        format: string,
-                        quality: string,
-                    ) => Promise<number>
-                    Cancel: (id: number) => Promise<void>
-                    GetQueue: () => Promise<DownloadItem[]>
-                    GetDownloadPath: () => Promise<string>
-                    SetDownloadPath: (path: string) => Promise<void>
-                    OpenFolderDialog: () => Promise<string>
-                    OpenFolder: (path?: string) => Promise<void>
-                    OpenDownloadedFile: (filePath: string) => Promise<void>
-                    ForceUpdateYtdlp: () => Promise<string>
-                    SetAutostart: (enabled: boolean) => Promise<void>
-                    IsAutostartEnabled: () => Promise<boolean>
-                    SetWindowSize: (width: number, height: number) => Promise<void>
-                    GetWindowSize: () => Promise<{ width: number; height: number }>
-                    GetVideoInfo: (url: string) => Promise<VideoMetadata>
-                }
+                App?: WailsApp
             }
         }
         runtime?: {
@@ -51,12 +50,8 @@ declare global {
     }
 }
 
-function hasWailsApp(): boolean {
-    return typeof window !== "undefined" && !!window.go?.main?.App
-}
-
-function hasWailsRuntime(): boolean {
-    return typeof window !== "undefined" && !!window.runtime?.EventsOn
+function wailsApp(): WailsApp | undefined {
+    return typeof window !== "undefined" ? window.go?.main?.App : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +141,9 @@ function simClearTimers(id: number) {
     item.timers = []
 }
 
-const simBridge = {
+const simBridge: WailsApp & {
+    EventsOn: (event: string, cb: AnyListener) => () => void
+} = {
     Download(url: string, format: string, quality: string): Promise<number> {
         const id = sim.nextId++
         sim.queue.set(id, {
@@ -238,111 +235,49 @@ const simBridge = {
 // ---------------------------------------------------------------------------
 
 export function isWailsRuntime(): boolean {
-    return hasWailsApp()
+    return !!wailsApp()
 }
 
-export async function Download(
+/**
+ * Delega un método del backend en Wails, o en el simulador cuando la app corre
+ * en el navegador.
+ */
+function bridge<K extends keyof WailsApp>(name: K): WailsApp[K] {
+    return ((...args: unknown[]) => {
+        const app = wailsApp()
+        const target: WailsApp = app ?? simBridge
+        const method = target[name] as (...a: unknown[]) => unknown
+        return method.apply(target, args)
+    }) as WailsApp[K]
+}
+
+export const Download: (
     url: string,
     format: DownloadFormat,
     quality: string,
-): Promise<number> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.Download(url, format, quality)
-    }
-    return simBridge.Download(url, format, quality)
-}
+) => Promise<number> = bridge("Download")
+export const Cancel = bridge("Cancel")
+export const GetDownloadPath = bridge("GetDownloadPath")
+export const SetDownloadPath = bridge("SetDownloadPath")
+export const OpenFolderDialog = bridge("OpenFolderDialog")
+export const OpenDownloadedFile = bridge("OpenDownloadedFile")
+export const ForceUpdateYtdlp = bridge("ForceUpdateYtdlp")
+export const SetAutostart = bridge("SetAutostart")
+export const IsAutostartEnabled = bridge("IsAutostartEnabled")
+export const SetWindowSize = bridge("SetWindowSize")
+export const GetVideoInfo = bridge("GetVideoInfo")
 
-export async function Cancel(id: number): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.Cancel(id)
-    }
-    return simBridge.Cancel(id)
+export async function OpenFolder(path?: string): Promise<void> {
+    return bridge("OpenFolder")(path ?? "")
 }
 
 export async function GetQueue(): Promise<DownloadItem[]> {
-    if (hasWailsApp()) {
-        const result = await window.go!.main!.App!.GetQueue()
-        return result ?? []
-    }
-    return simBridge.GetQueue()
-}
-
-export async function GetDownloadPath(): Promise<string> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.GetDownloadPath()
-    }
-    return simBridge.GetDownloadPath()
-}
-
-export async function SetDownloadPath(path: string): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.SetDownloadPath(path)
-    }
-    return simBridge.SetDownloadPath(path)
-}
-
-export async function OpenFolderDialog(): Promise<string> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.OpenFolderDialog()
-    }
-    return simBridge.OpenFolderDialog()
-}
-
-export async function OpenFolder(path?: string): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.OpenFolder(path ?? "")
-    }
-    return simBridge.OpenFolder(path)
-}
-
-export async function OpenDownloadedFile(filePath: string): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.OpenDownloadedFile(filePath)
-    }
-    return simBridge.OpenDownloadedFile(filePath)
-}
-
-export async function ForceUpdateYtdlp(): Promise<string> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.ForceUpdateYtdlp()
-    }
-    return simBridge.ForceUpdateYtdlp()
-}
-
-export async function SetAutostart(enabled: boolean): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.SetAutostart(enabled)
-    }
-    return simBridge.SetAutostart(enabled)
-}
-
-export async function IsAutostartEnabled(): Promise<boolean> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.IsAutostartEnabled()
-    }
-    return simBridge.IsAutostartEnabled()
-}
-
-export async function SetWindowSize(width: number, height: number): Promise<void> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.SetWindowSize(width, height)
-    }
-    return simBridge.SetWindowSize(width, height)
+    return (await bridge("GetQueue")()) ?? []
 }
 
 export async function GetWindowSize(): Promise<{ width: number; height: number }> {
-    if (hasWailsApp()) {
-        const res = await window.go!.main!.App!.GetWindowSize()
-        return res ?? { width: window.innerWidth, height: window.innerHeight }
-    }
-    return simBridge.GetWindowSize()
-}
-
-export async function GetVideoInfo(url: string): Promise<VideoMetadata> {
-    if (hasWailsApp()) {
-        return window.go!.main!.App!.GetVideoInfo(url)
-    }
-    return simBridge.GetVideoInfo(url)
+    const size = await bridge("GetWindowSize")()
+    return size ?? { width: window.innerWidth, height: window.innerHeight }
 }
 
 /**
@@ -351,7 +286,7 @@ export async function GetVideoInfo(url: string): Promise<VideoMetadata> {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function EventsOn(eventName: string, callback: (...args: any[]) => void): () => void {
-    if (hasWailsRuntime()) {
+    if (typeof window !== "undefined" && window.runtime?.EventsOn) {
         const off = window.runtime!.EventsOn(eventName, callback)
         if (typeof off === "function") return off
         return () => {
