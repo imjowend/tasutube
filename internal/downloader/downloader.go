@@ -82,19 +82,27 @@ func FetchVideoMetadata(ctx context.Context, url string, ytdlpMgr *ytdlp.Manager
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("no se pudo leer la salida de yt-dlp: %w", err)
 	}
+	var errBuf strings.Builder
+	cmd.Stderr = &errBuf
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("no se pudo ejecutar yt-dlp: %w", err)
 	}
 
 	var raw rawYtdlpMeta
-	if parseErr := json.NewDecoder(stdout).Decode(&raw); parseErr != nil {
-		_ = cmd.Wait()
-		return nil, fmt.Errorf("error al procesar datos del video: %w", parseErr)
+	parseErr := json.NewDecoder(stdout).Decode(&raw)
+	waitErr := cmd.Wait()
+
+	// El error del proceso explica mejor el fallo que el error de parseo:
+	// cuando yt-dlp falla, stdout viene vacío y el JSON nunca llega.
+	if waitErr != nil {
+		return nil, fmt.Errorf("yt-dlp no pudo obtener los datos del video: %w%s", waitErr, formatStderr(errBuf.String()))
 	}
-	_ = cmd.Wait()
+	if parseErr != nil {
+		return nil, fmt.Errorf("error al procesar datos del video: %w%s", parseErr, formatStderr(errBuf.String()))
+	}
 
 	meta := &VideoMetadata{
 		Title:     raw.Title,
@@ -146,6 +154,16 @@ func FetchVideoMetadata(ctx context.Context, url string, ytdlpMgr *ytdlp.Manager
 	return meta, nil
 }
 
+// formatStderr devuelve la salida de error del proceso lista para adjuntar a
+// un mensaje de error, o una cadena vacía si el proceso no escribió nada.
+func formatStderr(stderr string) string {
+	trimmed := strings.TrimSpace(stderr)
+	if trimmed == "" {
+		return ""
+	}
+	return ": " + trimmed
+}
+
 type ProgressEmitter func(id int, percent float64)
 
 func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath string, ytdlpMgr *ytdlp.Manager, emitProgress ProgressEmitter) DownloadResult {
@@ -178,7 +196,8 @@ func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath
 
 	ytdlpPath, resolveErr := ytdlpMgr.Resolve(ctx)
 	if resolveErr != nil {
-		return DownloadResult{false, "No se pudo preparar yt-dlp. Revisá tu conexión a internet.", ""}
+		log.Printf("downloader: no se pudo resolver yt-dlp: %v", resolveErr)
+		return DownloadResult{false, fmt.Sprintf("No se pudo preparar yt-dlp (%v). Revisá tu conexión a internet.", resolveErr), ""}
 	}
 
 	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
@@ -186,13 +205,15 @@ func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return DownloadResult{false, "Error al iniciar descarga", ""}
+		log.Printf("downloader: no se pudo abrir stdout de yt-dlp: %v", err)
+		return DownloadResult{false, fmt.Sprintf("Error al iniciar descarga: %v", err), ""}
 	}
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
 
 	if err := cmd.Start(); err != nil {
-		return DownloadResult{false, "Error al iniciar descarga", ""}
+		log.Printf("downloader: no se pudo ejecutar yt-dlp: %v", err)
+		return DownloadResult{false, fmt.Sprintf("Error al iniciar descarga: %v", err), ""}
 	}
 
 	scanner := bufio.NewScanner(stdout)
@@ -204,20 +225,32 @@ func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath
 			}
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("downloader: error leyendo stdout: %v", err)
+	scanErr := scanner.Err()
+	if scanErr != nil {
+		log.Printf("downloader: error leyendo stdout: %v", scanErr)
 	}
 
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() != nil {
 			return DownloadResult{false, "Descarga cancelada", ""}
 		}
-		errMsg := errBuf.String()
+		errMsg := strings.TrimSpace(errBuf.String())
 		if strings.Contains(errMsg, "ExtractorError") || strings.Contains(errMsg, "Unable to extract") || strings.Contains(errMsg, "Sign in to confirm") {
 			log.Println("yt-dlp: error de extractor detectado, re-descargando versión de GitHub...")
-			_ = ytdlpMgr.ForceRedownload(ctx)
+			if redownloadErr := ytdlpMgr.ForceRedownload(ctx); redownloadErr != nil {
+				log.Printf("yt-dlp: la re-descarga automática falló: %v", redownloadErr)
+			}
+		}
+		if errMsg == "" {
+			errMsg = err.Error()
 		}
 		return DownloadResult{false, fmt.Sprintf("Error: %s", errMsg), ""}
+	}
+
+	// yt-dlp terminó bien pero perdimos parte de su salida: no podemos afirmar
+	// que el progreso reportado fue completo.
+	if scanErr != nil {
+		return DownloadResult{false, fmt.Sprintf("Error al leer el progreso de la descarga: %v", scanErr), ""}
 	}
 
 	if emitProgress != nil {
@@ -239,6 +272,7 @@ func getBaseDownloadPath(downloadPath string) string {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
+		log.Printf("downloader: no se pudo determinar la carpeta del usuario: %v", err)
 		return ""
 	}
 	return filepath.Join(home, "Downloads")
@@ -291,6 +325,7 @@ func AudioQuality(quality string) string {
 func DefaultDownloadPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		log.Printf("downloader: no se pudo determinar la carpeta del usuario, se usa el directorio actual: %v", err)
 		return "%(title)s.%(ext)s"
 	}
 	return filepath.Join(home, "Downloads", "%(title)s.%(ext)s")

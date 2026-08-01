@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -105,7 +106,14 @@ func SelfUpdateYtdlp(ctx context.Context, path string) error {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, "-U")
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if detail := strings.TrimSpace(string(out)); detail != "" {
+			return fmt.Errorf("yt-dlp -U fall\u00f3: %w: %s", err, detail)
+		}
+		return fmt.Errorf("yt-dlp -U fall\u00f3: %w", err)
+	}
+	return nil
 }
 
 type Manager struct {
@@ -135,10 +143,12 @@ func NewManagerAt(ctx context.Context, targetPath, downloadURL string) *Manager 
 				if dlErr := DownloadYtdlp(context.Background(), downloadURL, targetPath); dlErr != nil {
 					log.Printf("yt-dlp: error al actualizar desde GitHub Releases: %v", dlErr)
 				}
-			} else {
-				if updateErr := SelfUpdateYtdlp(context.Background(), targetPath); updateErr != nil {
-					log.Printf("yt-dlp: no se pudo autoactualizar via -U, intentando descarga directa: %v", updateErr)
-					_ = DownloadYtdlp(context.Background(), downloadURL, targetPath)
+				return
+			}
+			if updateErr := SelfUpdateYtdlp(context.Background(), targetPath); updateErr != nil {
+				log.Printf("yt-dlp: no se pudo autoactualizar via -U, intentando descarga directa: %v", updateErr)
+				if dlErr := DownloadYtdlp(context.Background(), downloadURL, targetPath); dlErr != nil {
+					log.Printf("yt-dlp: la descarga directa de respaldo también falló: %v", dlErr)
 				}
 			}
 		}()
@@ -147,11 +157,16 @@ func NewManagerAt(ctx context.Context, targetPath, downloadURL string) *Manager 
 	}
 
 	go func() {
-		if downloadErr := DownloadYtdlp(ctx, downloadURL, targetPath); downloadErr != nil {
+		downloadErr := DownloadYtdlp(ctx, downloadURL, targetPath)
+
+		m.mu.Lock()
+		if downloadErr != nil {
 			m.err = fmt.Errorf("no se pudo descargar yt-dlp: %w", downloadErr)
 		} else {
 			m.path = targetPath
 		}
+		m.mu.Unlock()
+
 		close(m.ready)
 	}()
 
@@ -163,7 +178,13 @@ func (m *Manager) Resolve(ctx context.Context) (string, error) {
 	case <-m.ready:
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		return m.path, m.err
+		if m.err != nil {
+			return "", m.err
+		}
+		if m.path == "" {
+			return "", fmt.Errorf("yt-dlp no está disponible")
+		}
+		return m.path, nil
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
