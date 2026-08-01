@@ -54,10 +54,14 @@ type App struct {
 }
 
 func NewApp() *App {
+	return newAppWithYtdlp(ytdlp.NewManager())
+}
+
+func newAppWithYtdlp(mgr *ytdlp.Manager) *App {
 	a := &App{
 		jobs:    make(chan job, 10),
 		cancels: make(map[int]context.CancelFunc),
-		ytdlp:   ytdlp.NewManager(),
+		ytdlp:   mgr,
 	}
 	for i := 0; i < 3; i++ {
 		go a.worker()
@@ -272,9 +276,15 @@ func (a *App) setStatus(id int, status Status, errMsg string, filePath string) {
 }
 
 func (a *App) emitStatus(id int, status Status, errMsg string, filePath string) {
+	if a.ctx == nil {
+		return
+	}
 	wailsruntime.EventsEmit(a.ctx, "download:status", id, status, errMsg, filePath)
 }
 
 func (a *App) emitProgress(id int, percent float64) {
+	if a.ctx == nil {
+		return
+	}
 	wailsruntime.EventsEmit(a.ctx, "download:progress", id, percent)
 }
