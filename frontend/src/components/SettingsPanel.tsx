@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react"
+import { useFolderPicker } from "../hooks/useFolderPicker"
+import { BACK_BUTTON_CLASSES } from "../lib/ui"
 import {
     ForceUpdateYtdlp,
     GetWindowSize,
     IsAutostartEnabled,
-    OpenFolderDialog,
     SetAutostart,
-    SetDownloadPath,
     SetWindowSize,
 } from "../lib/wailsBridge"
 import { errorMessage } from "../lib/errors"
+import { GearIcon, RefreshIcon } from "./icons"
 
 interface SettingsPanelProps {
     path: string
@@ -27,7 +28,7 @@ export function SettingsPanel({
     onPathSaved,
     onBack,
 }: SettingsPanelProps) {
-    const [picking, setPicking] = useState(false)
+    const { picking, pickFolder, folderError } = useFolderPicker(onPathSaved)
 
     // yt-dlp update state
     const [updatingYtdlp, setUpdatingYtdlp] = useState(false)
@@ -37,8 +38,7 @@ export function SettingsPanel({
     const [autostart, setAutostartState] = useState(false)
     const [autostartError, setAutostartError] = useState<string | null>(null)
 
-    // errors coming from the backend for the folder picker / window size
-    const [folderError, setFolderError] = useState<string | null>(null)
+    // errors coming from the backend for the window size
     const [sizeError, setSizeError] = useState<string | null>(null)
 
     // window size state
@@ -101,24 +101,6 @@ export function SettingsPanel({
         }
     }
 
-    async function handlePickFolder() {
-        setPicking(true)
-        setFolderError(null)
-        try {
-            const selected = await OpenFolderDialog()
-            if (selected) {
-                await SetDownloadPath(selected)
-                onPathSaved(selected)
-            }
-        } catch (err) {
-            console.error("[tasutube] OpenFolderDialog failed:", err)
-            setFolderError(
-                errorMessage(err, "No se pudo elegir la carpeta de destino"),
-            )
-        } finally {
-            setPicking(false)
-        }
-    }
 
     async function handleForceUpdateYtdlp() {
         setUpdatingYtdlp(true)
@@ -161,7 +143,7 @@ export function SettingsPanel({
                     <button
                         type="button"
                         onClick={onBack}
-                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all hover:scale-105 active:scale-95"
+                        className={BACK_BUTTON_CLASSES}
                     >
                         ← Volver a Descargar
                     </button>
@@ -174,7 +156,7 @@ export function SettingsPanel({
                     </label>
                     <button
                         type="button"
-                        onClick={handlePickFolder}
+                        onClick={pickFolder}
                         disabled={picking}
                         className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-left text-sm transition-all hover:bg-zinc-700/80 hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -289,34 +271,5 @@ export function SettingsPanel({
                 Guardar y Volver
             </button>
         </div>
-    )
-}
-
-function GearIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className={className}
-            aria-hidden="true"
-        >
-            <path
-                fillRule="evenodd"
-                d="M8.34 1.804A1 1 0 019.32 1h1.36a1 1 0 01.98.804l.295 1.473a6.95 6.95 0 011.564.9l1.453-.387a1 1 0 011.054.461l.68 1.18a1 1 0 01-.157 1.143l-1.024 1.124a6.974 6.974 0 010 1.806l1.024 1.124a1 1 0 01.157 1.143l-.68 1.18a1 1 0 01-1.054.46l-1.453-.386a6.95 6.95 0 01-1.564.9l-.295 1.473A1 1 0 0110.68 19H9.32a1 1 0 01-.98-.804l-.295-1.473a6.95 6.95 0 01-1.564-.9l-1.453.386a1 1 0 01-1.054-.46l-.68-1.18a1 1 0 01.157-1.143L4.475 12.3a6.974 6.974 0 010-1.806L3.45 9.37a1 1 0 01-.157-1.143l.68-1.18a1 1 0 011.054-.46l1.453.386a6.95 6.95 0 011.564-.9l.295-1.473zM10 13a3 3 0 100-6 3 3 0 000 6z"
-                clipRule="evenodd"
-            />
-        </svg>
-    )
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
-            <path
-                fillRule="evenodd"
-                d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.609-1.276z"
-                clipRule="evenodd"
-            />
-        </svg>
     )
 }

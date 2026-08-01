@@ -1,3 +1,4 @@
+import { BACK_BUTTON_CLASSES, selectableClasses } from "../lib/ui"
 import { type DownloadFormat, type VideoMetadata } from "../types"
 
 interface AdvancedPanelProps {
@@ -45,7 +46,7 @@ export function AdvancedPanel({
                     <button
                         type="button"
                         onClick={onBack}
-                        className="text-xs font-semibold px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all hover:scale-105 active:scale-95"
+                        className={BACK_BUTTON_CLASSES}
                     >
                         ← Volver al Formulario
                     </button>
@@ -97,14 +98,10 @@ export function AdvancedPanel({
                                         type="button"
                                         disabled={isUnavailable}
                                         onClick={() => onSelectQuality(res.value)}
-                                        className={
-                                            "px-4 py-3 rounded-xl text-xs font-semibold border flex items-center justify-between transition-all active:scale-95 " +
-                                            (isUnavailable
-                                                ? "bg-zinc-800/30 border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50"
-                                                : isSelected
-                                                  ? "bg-red-600 border-red-500 text-white shadow-lg"
-                                                  : "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700")
-                                        }
+                                        className={selectableClasses(
+                                            "px-4 py-3 rounded-xl text-xs font-semibold border flex items-center justify-between transition-all active:scale-95",
+                                            { selected: isSelected, disabled: isUnavailable },
+                                        )}
                                     >
                                         <span>{res.label}</span>
                                         {isUnavailable ? (
@@ -135,12 +132,10 @@ export function AdvancedPanel({
                                         key={b.value}
                                         type="button"
                                         onClick={() => onSelectQuality(b.value)}
-                                        className={
-                                            "w-full px-4 py-3 rounded-xl text-xs font-semibold border flex items-center justify-between transition-all active:scale-95 " +
-                                            (isSelected
-                                                ? "bg-red-600 border-red-500 text-white shadow-lg"
-                                                : "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700")
-                                        }
+                                        className={selectableClasses(
+                                            "w-full px-4 py-3 rounded-xl text-xs font-semibold border flex items-center justify-between transition-all active:scale-95",
+                                            { selected: isSelected },
+                                        )}
                                     >
                                         <span>{b.label}</span>
                                         {isSelected && <span className="text-xs font-bold">✓ Seleccionado</span>}

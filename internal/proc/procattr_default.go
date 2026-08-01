@@ -1,6 +1,6 @@
 //go:build !windows
 
-package downloader
+package proc
 
 import "os/exec"
 

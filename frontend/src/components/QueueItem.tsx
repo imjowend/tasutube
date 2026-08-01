@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { OpenDownloadedFile, OpenFolder } from "../lib/wailsBridge"
 import { qualityLabel, type DownloadItemWithProgress } from "../types"
+import { CheckIcon, ClockIcon, WarnIcon, XCircleIcon, XIcon } from "./icons"
 
 interface QueueItemProps {
     item: DownloadItemWithProgress
@@ -55,18 +55,7 @@ export function QueueItem({ item, onCancel }: QueueItemProps) {
                         aria-label="Cancelar descarga"
                         className="shrink-0 w-7 h-7 inline-flex items-center justify-center rounded-md bg-zinc-700/60 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 transition-colors"
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                            className="w-4 h-4"
-                        >
-                            <path
-                                fillRule="evenodd"
-                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                clipRule="evenodd"
-                            />
-                        </svg>
+                        <XIcon className="w-4 h-4" />
                     </button>
                 )}
             </div>
@@ -147,53 +136,5 @@ function StatusRow({
                 {showFullError ? message : truncated}
             </span>
         </button>
-    )
-}
-
-function ClockIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
-            <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .2.08.39.22.53l3 3a.75.75 0 101.06-1.06l-2.78-2.78V5z"
-                clipRule="evenodd"
-            />
-        </svg>
-    )
-}
-
-function CheckIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
-            <path
-                fillRule="evenodd"
-                d="M16.704 5.29a1 1 0 010 1.42l-8 8a1 1 0 01-1.42 0l-4-4a1 1 0 011.42-1.42L8 12.59l7.29-7.3a1 1 0 011.414 0z"
-                clipRule="evenodd"
-            />
-        </svg>
-    )
-}
-
-function WarnIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
-            <path
-                fillRule="evenodd"
-                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 8a1 1 0 100-2 1 1 0 000 2z"
-                clipRule="evenodd"
-            />
-        </svg>
-    )
-}
-
-function XCircleIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden="true">
-            <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                clipRule="evenodd"
-            />
-        </svg>
     )
 }
