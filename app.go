@@ -98,9 +98,11 @@ func (a *App) worker() {
 }
 
 func (a *App) Download(url string, format string, quality string) int {
-	if url == "" {
+	safeURL, err := downloader.ValidateURL(url)
+	if err != nil {
 		return 0
 	}
+	url = safeURL
 	item := a.addItem(url, format, quality)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -166,6 +168,11 @@ func (a *App) OpenFolder(path string) error {
 func (a *App) OpenDownloadedFile(filePath string) error {
 	target := strings.TrimSpace(filePath)
 	if target == "" {
+		return fmt.Errorf("ruta invalida")
+	}
+
+	fi, err := os.Stat(target)
+	if err != nil || fi.IsDir() {
 		return fmt.Errorf("ruta invalida")
 	}
 

@@ -34,8 +34,26 @@ interface DownloadFormProps {
     onQualityChange: (q: string) => void
 }
 
+const ALLOWED_HOSTS = [
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "music.youtube.com",
+    "youtu.be",
+    "www.youtu.be",
+    "youtube-nocookie.com",
+    "www.youtube-nocookie.com",
+]
+
 function isValidYoutubeUrl(url: string): boolean {
-    return url.includes("youtube.com") || url.includes("youtu.be")
+    let parsed: URL
+    try {
+        parsed = new URL(url.trim())
+    } catch {
+        return false
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
+    return ALLOWED_HOSTS.includes(parsed.hostname.toLowerCase())
 }
 
 export function DownloadForm({
