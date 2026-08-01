@@ -2,16 +2,16 @@
 package userpath
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// DownloadsDir devuelve la carpeta de descargas del usuario, o "" si no se
-// puede determinar el home.
-func DownloadsDir() string {
+// DownloadsDir devuelve la carpeta de descargas del usuario.
+func DownloadsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("no se pudo determinar la carpeta del usuario: %w", err)
 	}
-	return filepath.Join(home, "Downloads")
+	return filepath.Join(home, "Downloads"), nil
 }

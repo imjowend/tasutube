@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"tasutube/internal/autostart"
@@ -95,9 +96,9 @@ func (a *App) worker() {
 	}
 }
 
-func (a *App) Download(url string, format string, quality string) int {
-	if url == "" {
-		return 0
+func (a *App) Download(url string, format string, quality string) (int, error) {
+	if strings.TrimSpace(url) == "" {
+		return 0, fmt.Errorf("la URL está vacía")
 	}
 	item := a.addItem(url, format, quality)
 
@@ -106,16 +107,24 @@ func (a *App) Download(url string, format string, quality string) int {
 	a.cancels[item.ID] = cancel
 	a.mu.Unlock()
 
-	a.jobs <- job{item.ID, url, format, quality, ctx}
-	return item.ID
+	select {
+	case a.jobs <- job{item.ID, url, format, quality, ctx}:
+		return item.ID, nil
+	default:
+		// No pudimos encolar: descartamos el ítem para que la UI no muestre
+		// una descarga que nunca va a arrancar.
+		cancel()
+		a.removeItem(item.ID)
+		return 0, fmt.Errorf("la cola de descargas está llena, esperá a que terminen algunas descargas")
+	}
 }
 
-func (a *App) GetDownloadPath() string {
+func (a *App) GetDownloadPath() (string, error) {
 	a.mu.Lock()
 	p := a.downloadPath
 	a.mu.Unlock()
 	if p != "" {
-		return p
+		return p, nil
 	}
 	return userpath.DownloadsDir()
 }
@@ -129,7 +138,11 @@ func (a *App) SetDownloadPath(path string) {
 func (a *App) OpenFolder(path string) error {
 	target := strings.TrimSpace(path)
 	if target == "" {
-		target = a.GetDownloadPath()
+		defaultPath, err := a.GetDownloadPath()
+		if err != nil {
+			return err
+		}
+		target = defaultPath
 	}
 	return opener.Reveal(target)
 }
@@ -143,21 +156,29 @@ func (a *App) OpenDownloadedFile(filePath string) error {
 }
 
 func (a *App) ForceUpdateYtdlp() (string, error) {
-	if err := a.ytdlp.ForceRedownload(a.ctx); err != nil {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := a.ytdlp.ForceRedownload(ctx); err != nil {
 		return "", err
 	}
 	return "✓ yt-dlp fue actualizado a la última versión desde GitHub Releases.", nil
 }
 
 func (a *App) GetVideoInfo(url string) (*downloader.VideoMetadata, error) {
-	return downloader.FetchVideoMetadata(a.ctx, url, a.ytdlp)
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return downloader.FetchVideoMetadata(ctx, url, a.ytdlp)
 }
 
 func (a *App) SetAutostart(enabled bool) error {
 	return autostart.SetEnabled(enabled)
 }
 
-func (a *App) IsAutostartEnabled() bool {
+func (a *App) IsAutostartEnabled() (bool, error) {
 	return autostart.IsEnabled()
 }
 
@@ -170,22 +191,25 @@ func (a *App) GetWindowSize() map[string]int {
 	return map[string]int{"width": w, "height": h}
 }
 
-func (a *App) OpenFolderDialog() string {
+func (a *App) OpenFolderDialog() (string, error) {
 	path, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: "Elegí la carpeta de destino",
 	})
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("no se pudo abrir el selector de carpetas: %w", err)
 	}
-	return path
+	return path, nil
 }
 
-func (a *App) Cancel(id int) {
+func (a *App) Cancel(id int) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if cancel, ok := a.cancels[id]; ok {
-		cancel()
+	cancel, ok := a.cancels[id]
+	a.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("no hay una descarga activa con id %d", id)
 	}
+	cancel()
+	return nil
 }
 
 func (a *App) GetQueue() []DownloadItem {
@@ -213,6 +237,18 @@ func (a *App) addItem(url, format, quality string) *DownloadItem {
 	return item
 }
 
+func (a *App) removeItem(id int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.cancels, id)
+	for i, item := range a.queue {
+		if item.ID == id {
+			a.queue = append(a.queue[:i], a.queue[i+1:]...)
+			return
+		}
+	}
+}
+
 func (a *App) setStatus(id int, status Status, errMsg string, filePath string) {
 	a.mu.Lock()
 	for _, item := range a.queue {
@@ -230,9 +266,16 @@ func (a *App) setStatus(id int, status Status, errMsg string, filePath string) {
 }
 
 func (a *App) emitStatus(id int, status Status, errMsg string, filePath string) {
+	if a.ctx == nil {
+		log.Printf("app: evento download:status descartado (runtime no iniciado): id=%d status=%s err=%q", id, status, errMsg)
+		return
+	}
 	wailsruntime.EventsEmit(a.ctx, "download:status", id, status, errMsg, filePath)
 }
 
 func (a *App) emitProgress(id int, percent float64) {
+	if a.ctx == nil {
+		return
+	}
 	wailsruntime.EventsEmit(a.ctx, "download:progress", id, percent)
 }

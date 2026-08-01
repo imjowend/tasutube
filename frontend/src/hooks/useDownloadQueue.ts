@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { errorMessage } from "../lib/errors"
 import { Cancel, Download, EventsOn, GetQueue } from "../lib/wailsBridge"
 import type {
     DownloadFormat,
@@ -13,8 +14,21 @@ import type {
  * - Hydrates from GetQueue() on mount.
  * - Listens to "download:status" and "download:progress" events from Wails.
  * - Exposes an enqueue() that calls Download() and immediately tracks the new item.
+ *
+ * Backend failures that the user can't otherwise notice (hydration, cancel) are
+ * reported through `onError` instead of being swallowed into the console.
  */
-export function useDownloadQueue() {
+export function useDownloadQueue(onError?: (message: string) => void) {
+    // Keep the latest callback without re-subscribing to backend events.
+    const onErrorRef = useRef(onError)
+    onErrorRef.current = onError
+
+    const reportError = useCallback((err: unknown, fallback: string) => {
+        const message = errorMessage(err, fallback)
+        console.error(`[tasutube] ${fallback}:`, err)
+        onErrorRef.current?.(message)
+    }, [])
+
     const [items, setItems] = useState<Map<number, DownloadItemWithProgress>>(
         () => new Map(),
     )
@@ -89,7 +103,8 @@ export function useDownloadQueue() {
                 })
             })
             .catch((err) => {
-                console.error("[v0] GetQueue failed:", err)
+                if (cancelled) return
+                reportError(err, "No se pudo leer la cola de descargas")
             })
 
         const offStatus = EventsOn(
@@ -114,7 +129,7 @@ export function useDownloadQueue() {
             offStatus?.()
             offProgress?.()
         }
-    }, [upsert, createdAtFor])
+    }, [upsert, createdAtFor, reportError])
 
     const enqueue = useCallback(
         async (
@@ -135,13 +150,16 @@ export function useDownloadQueue() {
         [upsert],
     )
 
-    const cancel = useCallback(async (id: number) => {
-        try {
-            await Cancel(id)
-        } catch (err) {
-            console.error("[v0] Cancel failed:", err)
-        }
-    }, [])
+    const cancel = useCallback(
+        async (id: number) => {
+            try {
+                await Cancel(id)
+            } catch (err) {
+                reportError(err, "No se pudo cancelar la descarga")
+            }
+        },
+        [reportError],
+    )
 
     // Sorted newest first.
     const sortedItems = Array.from(items.values()).sort(

@@ -3,10 +3,12 @@
 package opener
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"tasutube/internal/proc"
 )
@@ -15,11 +17,11 @@ import (
 func Open(target string) error {
 	switch runtime.GOOS {
 	case "windows":
-		return start(exec.Command("cmd", "/c", "start", "", filepath.Clean(target)))
+		return start(exec.Command("cmd", "/c", "start", "", filepath.Clean(target)), target)
 	case "darwin":
-		return exec.Command("open", target).Run()
+		return run(exec.Command("open", target), target)
 	default:
-		return exec.Command("xdg-open", target).Run()
+		return run(exec.Command("xdg-open", target), target)
 	}
 }
 
@@ -35,20 +37,38 @@ func Reveal(target string) error {
 	case "windows":
 		clean := filepath.Clean(target)
 		if isFile() {
-			return start(exec.Command("explorer", "/select,", clean))
+			return start(exec.Command("explorer", "/select,", clean), target)
 		}
-		return start(exec.Command("explorer", clean))
+		return start(exec.Command("explorer", clean), target)
 	case "darwin":
-		return exec.Command("open", target).Run()
+		return run(exec.Command("open", target), target)
 	default:
 		if isFile() {
 			target = filepath.Dir(target)
 		}
-		return exec.Command("xdg-open", target).Run()
+		return run(exec.Command("xdg-open", target), target)
 	}
 }
 
-func start(cmd *exec.Cmd) error {
+// start lanza el explorador del sistema sin esperar a que termine, devolviendo
+// un error con contexto si el proceso no pudo arrancar.
+func start(cmd *exec.Cmd, target string) error {
 	proc.HideWindow(cmd)
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("no se pudo abrir %q: %w", target, err)
+	}
+	return nil
+}
+
+// run ejecuta el comando y devuelve un error que incluye su salida de error.
+func run(cmd *exec.Cmd, target string) error {
+	var errBuf strings.Builder
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		if detail := strings.TrimSpace(errBuf.String()); detail != "" {
+			return fmt.Errorf("no se pudo abrir %q: %w: %s", target, err, detail)
+		}
+		return fmt.Errorf("no se pudo abrir %q: %w", target, err)
+	}
+	return nil
 }

@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import "./App.css"
 import { AdvancedPanel } from "./components/AdvancedPanel"
 import { DownloadForm, type FormStatus } from "./components/DownloadForm"
 import { QueueList } from "./components/QueueList"
 import { SettingsPanel } from "./components/SettingsPanel"
 import { useDownloadQueue } from "./hooks/useDownloadQueue"
+import { errorMessage } from "./lib/errors"
 import { isValidYoutubeUrl } from "./lib/youtube"
 import { DEFAULT_QUALITY, type DownloadFormat, type VideoMetadata } from "./types"
 
 export default function App() {
-    const { items, enqueue, cancel } = useDownloadQueue()
-
     const [activeView, setActiveView] = useState<"download" | "advanced" | "settings">("download")
     const [url, setUrl] = useState("")
     const [status, setStatus] = useState<FormStatus>({ type: null, message: "" })
+
+    const reportBackendError = useCallback((message: string) => {
+        setStatus({ type: "error", message, persistent: true })
+    }, [])
+
+    const { items, enqueue, cancel } = useDownloadQueue(reportBackendError)
     const [downloadPath, setDownloadPath] = useState("")
     const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
     const [activeFormat, setActiveFormat] = useState<DownloadFormat>("mp3")
@@ -68,10 +73,14 @@ export default function App() {
                 message: `Agregado a la cola: ${format.toUpperCase()}`,
             })
         } catch (err) {
-            console.error("[v0] enqueue failed:", err)
+            console.error("[tasutube] enqueue failed:", err)
             setStatus({
                 type: "error",
-                message: "Hubo un error al iniciar la descarga. Intentá de nuevo.",
+                message: errorMessage(
+                    err,
+                    "Hubo un error al iniciar la descarga. Intentá de nuevo.",
+                ),
+                persistent: true,
             })
         }
     }

@@ -6,6 +6,7 @@ import {
     type VideoMetadata,
 } from "../types"
 import { useFolderPicker } from "../hooks/useFolderPicker"
+import { errorMessage } from "../lib/errors"
 import { selectableClasses } from "../lib/ui"
 import { GetDownloadPath, GetVideoInfo } from "../lib/wailsBridge"
 import { isValidYoutubeUrl } from "../lib/youtube"
@@ -58,7 +59,8 @@ export function DownloadForm({
     const [analyzedUrl, setAnalyzedUrl] = useState("")
     const [submitting, setSubmitting] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
-    const { picking, pickFolder } = useFolderPicker(onPathChanged)
+    const { picking, pickFolder, folderError, setFolderError } = useFolderPicker(onPathChanged)
+    const [analyzeError, setAnalyzeError] = useState<string | null>(null)
 
     const qualities = useMemo(
         () => (activeFormat === "mp3" ? MP3_QUALITIES : MP4_QUALITIES),
@@ -70,9 +72,15 @@ export function DownloadForm({
 
     useEffect(() => {
         if (!downloadPath) {
-            GetDownloadPath().then((p) => {
-                if (p) onPathChanged(p)
-            })
+            GetDownloadPath()
+                .then((p) => {
+                    if (p) onPathChanged(p)
+                })
+                .catch((err) => {
+                    setFolderError(
+                        errorMessage(err, "No se pudo leer la carpeta de destino"),
+                    )
+                })
         }
     }, [downloadPath, onPathChanged])
 
@@ -83,13 +91,20 @@ export function DownloadForm({
 
             setAnalyzedUrl(trimmed)
             setAnalyzing(true)
+            setAnalyzeError(null)
             GetVideoInfo(trimmed)
                 .then((meta) => {
                     onMetadataLoaded(meta)
                 })
                 .catch((err) => {
-                    console.error("[v0] GetVideoInfo failed:", err)
+                    console.error("[tasutube] GetVideoInfo failed:", err)
                     onMetadataLoaded(null)
+                    setAnalyzeError(
+                        errorMessage(
+                            err,
+                            "No se pudo analizar el video. Igual podés intentar descargarlo.",
+                        ),
+                    )
                 })
                 .finally(() => {
                     setAnalyzing(false)
@@ -98,6 +113,7 @@ export function DownloadForm({
             if (analyzedUrl !== "") {
                 setAnalyzedUrl("")
                 onMetadataLoaded(null)
+                setAnalyzeError(null)
             }
         }
     }, [trimmed, analyzedUrl, onMetadataLoaded])
@@ -125,6 +141,7 @@ export function DownloadForm({
             setSubmitting(false)
         }
     }
+
 
     // Is the currently selected quality a custom/advanced resolution (like 2160p or 1440p or custom bitrate)?
     const isCustomQualitySelected = useMemo(() => {
@@ -177,6 +194,13 @@ export function DownloadForm({
                         <span className="w-3.5 h-3.5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
                         <span>Analizando calidad del video de YouTube...</span>
                     </div>
+                ) : analyzeError ? (
+                    <p
+                        role="alert"
+                        className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 text-left"
+                    >
+                        {analyzeError}
+                    </p>
                 ) : metadata ? (
                     <div className="p-3 bg-zinc-800/80 border border-zinc-700 rounded-xl flex items-center gap-3">
                         {metadata.thumbnail && (
@@ -308,9 +332,15 @@ export function DownloadForm({
             <div className="flex items-center justify-between pt-3 border-t border-zinc-800/80">
                 <div className="flex items-center gap-2 truncate">
                     <span className="text-base">📁</span>
-                    <span className="text-sm font-medium text-zinc-200 font-mono truncate max-w-[280px]" title={downloadPath}>
-                        {downloadPath || "Cargando ruta..."}
-                    </span>
+                    {folderError ? (
+                        <span role="alert" className="text-sm font-medium text-red-400 truncate max-w-[280px]" title={folderError}>
+                            {folderError}
+                        </span>
+                    ) : (
+                        <span className="text-sm font-medium text-zinc-200 font-mono truncate max-w-[280px]" title={downloadPath}>
+                            {downloadPath || "Cargando ruta..."}
+                        </span>
+                    )}
                 </div>
 
                 <button
