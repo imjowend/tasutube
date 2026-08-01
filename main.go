@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"log"
 	"os"
 	"strings"
 
@@ -40,6 +41,6 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatalf("no se pudo iniciar TasuTube: %v", err)
 	}
 }

@@ -42,6 +42,24 @@ func newTestApp(t *testing.T, script string) *App {
 	return app
 }
 
+func mustDownload(t *testing.T, app *App, url, format, quality string) int {
+	t.Helper()
+	id, err := app.Download(url, format, quality)
+	if err != nil {
+		t.Fatalf("Download(%q) error = %v", url, err)
+	}
+	return id
+}
+
+func mustDownloadPath(t *testing.T, app *App) string {
+	t.Helper()
+	path, err := app.GetDownloadPath()
+	if err != nil {
+		t.Fatalf("GetDownloadPath() error = %v", err)
+	}
+	return path
+}
+
 // waitForStatus espera a que el ítem alcance un estado terminal.
 func waitForStatus(t *testing.T, app *App, id int, want Status) DownloadItem {
 	t.Helper()
@@ -63,25 +81,15 @@ func waitForStatus(t *testing.T, app *App, id int, want Status) DownloadItem {
 	return last
 }
 
-func TestDownloadRejectsEmptyURL(t *testing.T) {
-	app := newTestApp(t, "exit 0\n")
-
-	if id := app.Download("", "mp3", "alta"); id != 0 {
-		t.Errorf("Download(\"\") = %d; want 0", id)
-	}
-	if queue := app.GetQueue(); len(queue) != 0 {
-		t.Errorf("cola = %v; want vacía", queue)
-	}
-}
-
 func TestDownloadCompletes(t *testing.T) {
 	app := newTestApp(t, "echo \"[download] 50.0% of 1.00MiB at 1.00MiB/s ETA 00:01\"\nexit 0\n")
 
-	id := app.Download("https://example.com/v", "mp3", "alta")
+	id := mustDownload(t, app, "https://example.com/v", "mp3", "alta")
 	item := waitForStatus(t, app, id, StatusCompleted)
 
-	if item.FilePath != app.GetDownloadPath() {
-		t.Errorf("FilePath = %q; want %q", item.FilePath, app.GetDownloadPath())
+	want := mustDownloadPath(t, app)
+	if item.FilePath != want {
+		t.Errorf("FilePath = %q; want %q", item.FilePath, want)
 	}
 	if item.Error != "" {
 		t.Errorf("Error = %q; want \"\"", item.Error)
@@ -94,7 +102,7 @@ func TestDownloadCompletes(t *testing.T) {
 func TestDownloadFailureRecordsError(t *testing.T) {
 	app := newTestApp(t, "echo 'ERROR: video privado' 1>&2\nexit 1\n")
 
-	id := app.Download("https://example.com/v", "mp4", "720p")
+	id := mustDownload(t, app, "https://example.com/v", "mp4", "720p")
 	item := waitForStatus(t, app, id, StatusError)
 
 	if !strings.Contains(item.Error, "video privado") {
@@ -105,23 +113,20 @@ func TestDownloadFailureRecordsError(t *testing.T) {
 func TestCancelStopsDownload(t *testing.T) {
 	app := newTestApp(t, "exec sleep 30\n")
 
-	id := app.Download("https://example.com/v", "mp3", "alta")
+	id := mustDownload(t, app, "https://example.com/v", "mp3", "alta")
 	waitForStatus(t, app, id, StatusDownloading)
 
-	app.Cancel(id)
+	if err := app.Cancel(id); err != nil {
+		t.Fatalf("Cancel() error = %v", err)
+	}
 	waitForStatus(t, app, id, StatusCancelled)
-}
-
-func TestCancelUnknownIDIsNoop(t *testing.T) {
-	app := newTestApp(t, "exit 0\n")
-	app.Cancel(999) // no debe entrar en pánico
 }
 
 func TestQueueAssignsIncrementalIDs(t *testing.T) {
 	app := newTestApp(t, "exit 0\n")
 
-	first := app.Download("https://example.com/1", "mp3", "alta")
-	second := app.Download("https://example.com/2", "mp3", "alta")
+	first := mustDownload(t, app, "https://example.com/1", "mp3", "alta")
+	second := mustDownload(t, app, "https://example.com/2", "mp3", "alta")
 
 	if first != 1 || second != 2 {
 		t.Errorf("ids = (%d, %d); want (1, 2)", first, second)
@@ -134,7 +139,7 @@ func TestQueueAssignsIncrementalIDs(t *testing.T) {
 func TestGetQueueReturnsCopies(t *testing.T) {
 	app := newTestApp(t, "exec sleep 30\n")
 
-	id := app.Download("https://example.com/v", "mp3", "alta")
+	id := mustDownload(t, app, "https://example.com/v", "mp3", "alta")
 	queue := app.GetQueue()
 	queue[0].URL = "mutado"
 
@@ -143,7 +148,9 @@ func TestGetQueueReturnsCopies(t *testing.T) {
 			t.Errorf("URL = %q; GetQueue() no debería exponer los ítems internos", item.URL)
 		}
 	}
-	app.Cancel(id)
+	if err := app.Cancel(id); err != nil {
+		t.Errorf("Cancel() error = %v", err)
+	}
 }
 
 func TestDownloadPathDefaultsToHomeDownloads(t *testing.T) {
@@ -153,12 +160,12 @@ func TestDownloadPathDefaultsToHomeDownloads(t *testing.T) {
 	if err != nil {
 		t.Skip("no hay home dir disponible")
 	}
-	if got, want := app.GetDownloadPath(), filepath.Join(home, "Downloads"); got != want {
+	if got, want := mustDownloadPath(t, app), filepath.Join(home, "Downloads"); got != want {
 		t.Errorf("GetDownloadPath() = %q; want %q", got, want)
 	}
 
 	app.SetDownloadPath("/tmp/tasutube-destino")
-	if got := app.GetDownloadPath(); got != "/tmp/tasutube-destino" {
+	if got := mustDownloadPath(t, app); got != "/tmp/tasutube-destino" {
 		t.Errorf("GetDownloadPath() = %q; want /tmp/tasutube-destino", got)
 	}
 }

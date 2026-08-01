@@ -8,6 +8,7 @@ import {
     SetDownloadPath,
     SetWindowSize,
 } from "../lib/wailsBridge"
+import { errorMessage } from "../lib/errors"
 
 interface SettingsPanelProps {
     path: string
@@ -34,6 +35,11 @@ export function SettingsPanel({
 
     // autostart state
     const [autostart, setAutostartState] = useState(false)
+    const [autostartError, setAutostartError] = useState<string | null>(null)
+
+    // errors coming from the backend for the folder picker / window size
+    const [folderError, setFolderError] = useState<string | null>(null)
+    const [sizeError, setSizeError] = useState<string | null>(null)
 
     // window size state
     const [currentSize, setCurrentSize] = useState<{ width: number; height: number }>({
@@ -42,7 +48,13 @@ export function SettingsPanel({
     })
 
     useEffect(() => {
-        IsAutostartEnabled().then((enabled) => setAutostartState(enabled))
+        IsAutostartEnabled()
+            .then((enabled) => setAutostartState(enabled))
+            .catch((err) => {
+                setAutostartError(
+                    errorMessage(err, "No se pudo leer el estado del inicio automático"),
+                )
+            })
         refreshWindowSize()
 
         const handleResize = () => {
@@ -60,7 +72,8 @@ export function SettingsPanel({
             } else {
                 setCurrentSize({ width: window.innerWidth, height: window.innerHeight })
             }
-        } catch {
+        } catch (err) {
+            console.error("[tasutube] GetWindowSize failed, usando el tamaño del viewport:", err)
             setCurrentSize({ width: window.innerWidth, height: window.innerHeight })
         }
     }
@@ -75,17 +88,22 @@ export function SettingsPanel({
         if (val === "custom") return
         const target = PRESET_RESOLUTIONS.find((r) => r.value === val)
         if (target) {
+            setSizeError(null)
             try {
                 await SetWindowSize(target.width, target.height)
                 setCurrentSize({ width: target.width, height: target.height })
             } catch (err) {
-                console.error("[v0] SetWindowSize failed:", err)
+                console.error("[tasutube] SetWindowSize failed:", err)
+                setSizeError(
+                    errorMessage(err, "No se pudo cambiar el tamaño de la ventana"),
+                )
             }
         }
     }
 
     async function handlePickFolder() {
         setPicking(true)
+        setFolderError(null)
         try {
             const selected = await OpenFolderDialog()
             if (selected) {
@@ -93,7 +111,10 @@ export function SettingsPanel({
                 onPathSaved(selected)
             }
         } catch (err) {
-            console.error("[v0] OpenFolderDialog failed:", err)
+            console.error("[tasutube] OpenFolderDialog failed:", err)
+            setFolderError(
+                errorMessage(err, "No se pudo elegir la carpeta de destino"),
+            )
         } finally {
             setPicking(false)
         }
@@ -108,7 +129,7 @@ export function SettingsPanel({
         } catch (err) {
             setYtdlpMsg({
                 type: "error",
-                text: err instanceof Error ? err.message : "Error al actualizar yt-dlp desde GitHub.",
+                text: errorMessage(err, "Error al actualizar yt-dlp desde GitHub."),
             })
         } finally {
             setUpdatingYtdlp(false)
@@ -117,11 +138,15 @@ export function SettingsPanel({
 
     async function handleToggleAutostart() {
         const next = !autostart
+        setAutostartError(null)
         try {
             await SetAutostart(next)
             setAutostartState(next)
         } catch (err) {
-            console.error("[v0] SetAutostart failed:", err)
+            console.error("[tasutube] SetAutostart failed:", err)
+            setAutostartError(
+                errorMessage(err, "No se pudo cambiar el inicio automático"),
+            )
         }
     }
 
@@ -157,6 +182,11 @@ export function SettingsPanel({
                             {picking ? "Abriendo selector..." : path || "Elegir carpeta..."}
                         </span>
                     </button>
+                    {folderError && (
+                        <p role="alert" className="mt-1.5 text-[11px] font-medium text-red-400">
+                            {folderError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Window Size Resolution */}
@@ -183,6 +213,11 @@ export function SettingsPanel({
                     <p className="text-[11px] text-zinc-500 mt-1.5">
                         Podés achicar o agrandar la ventana manualmente. Si cambia el tamaño, se ajustará automáticamente a Personalizado.
                     </p>
+                    {sizeError && (
+                        <p role="alert" className="mt-1.5 text-[11px] font-medium text-red-400">
+                            {sizeError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Motor yt-dlp */}
@@ -213,28 +248,35 @@ export function SettingsPanel({
                 </div>
 
                 {/* Windows Autostart */}
-                <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-semibold text-zinc-200">Iniciar con Windows</p>
-                        <p className="text-[11px] text-zinc-500">
-                            Iniciar TasuTube automáticamente al encender la PC
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-checked={autostart}
-                        onClick={handleToggleAutostart}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            autostart ? "bg-red-600" : "bg-zinc-700"
-                        }`}
-                    >
-                        <span
-                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                autostart ? "translate-x-5" : "translate-x-0"
+                <div className="pt-3 border-t border-zinc-800/80">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs font-semibold text-zinc-200">Iniciar con Windows</p>
+                            <p className="text-[11px] text-zinc-500">
+                                Iniciar TasuTube automáticamente al encender la PC
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={autostart}
+                            onClick={handleToggleAutostart}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                autostart ? "bg-red-600" : "bg-zinc-700"
                             }`}
-                        />
-                    </button>
+                        >
+                            <span
+                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    autostart ? "translate-x-5" : "translate-x-0"
+                                }`}
+                            />
+                        </button>
+                    </div>
+                    {autostartError && (
+                        <p role="alert" className="mt-1.5 text-[11px] font-medium text-red-400">
+                            {autostartError}
+                        </p>
+                    )}
                 </div>
             </div>
 
