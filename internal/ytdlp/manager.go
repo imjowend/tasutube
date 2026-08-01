@@ -40,6 +40,18 @@ func YtdlpTargetPath(cacheDir, goos string) string {
 	return filepath.Join(cacheDir, "Tasutube", "bin", YtdlpBinaryName(goos))
 }
 
+// defaultLocation devuelve la ruta local y la URL de release desde donde se
+// obtiene yt-dlp para el sistema actual.
+func defaultLocation() (targetPath, downloadURL string, err error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", "", fmt.Errorf("no se pudo determinar el directorio de cache: %w", err)
+	}
+	return YtdlpTargetPath(cacheDir, runtime.GOOS),
+		"https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + YtdlpAssetName(runtime.GOOS),
+		nil
+}
+
 func IsReasonableYtdlpSize(n int64) bool {
 	return n >= YtdlpMinValidSize
 }
@@ -176,12 +188,11 @@ func (m *Manager) ForceRedownload(ctx context.Context) error {
 	m.mu.Unlock()
 
 	if targetPath == "" || downloadURL == "" {
-		cacheDir, err := os.UserCacheDir()
+		var err error
+		targetPath, downloadURL, err = defaultLocation()
 		if err != nil {
-			return fmt.Errorf("no se pudo determinar directorio de cache: %w", err)
+			return err
 		}
-		targetPath = YtdlpTargetPath(cacheDir, runtime.GOOS)
-		downloadURL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + YtdlpAssetName(runtime.GOOS)
 	}
 
 	if err := DownloadYtdlp(ctx, downloadURL, targetPath); err != nil {
@@ -197,16 +208,13 @@ func (m *Manager) ForceRedownload(ctx context.Context) error {
 }
 
 func NewManager() *Manager {
-	cacheDir, err := os.UserCacheDir()
+	targetPath, downloadURL, err := defaultLocation()
 	if err != nil {
 		m := &Manager{ready: make(chan struct{})}
-		m.err = fmt.Errorf("no se pudo determinar el directorio de cache: %w", err)
+		m.err = err
 		close(m.ready)
 		return m
 	}
-
-	targetPath := YtdlpTargetPath(cacheDir, runtime.GOOS)
-	downloadURL := "https://github.com/yt-dlp/yt-dlp/releases/latest/download/" + YtdlpAssetName(runtime.GOOS)
 
 	return NewManagerAt(context.Background(), targetPath, downloadURL)
 }

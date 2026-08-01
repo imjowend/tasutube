@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"tasutube/internal/autostart"
 	"tasutube/internal/downloader"
+	"tasutube/internal/opener"
+	"tasutube/internal/userpath"
 	"tasutube/internal/ytdlp"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -119,11 +117,7 @@ func (a *App) GetDownloadPath() string {
 	if p != "" {
 		return p
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, "Downloads")
+	return userpath.DownloadsDir()
 }
 
 func (a *App) SetDownloadPath(path string) {
@@ -137,30 +131,7 @@ func (a *App) OpenFolder(path string) error {
 	if target == "" {
 		target = a.GetDownloadPath()
 	}
-
-	switch runtime.GOOS {
-	case "windows":
-		target = filepath.Clean(target)
-		fi, err := os.Stat(target)
-		var cmd *exec.Cmd
-		if err == nil && !fi.IsDir() {
-			cmd = exec.Command("explorer", "/select,", target)
-		} else {
-			cmd = exec.Command("explorer", target)
-		}
-		downloader.HideWindow(cmd)
-		return cmd.Start()
-	case "darwin":
-		cmd := exec.Command("open", target)
-		return cmd.Run()
-	default:
-		fi, err := os.Stat(target)
-		if err == nil && !fi.IsDir() {
-			target = filepath.Dir(target)
-		}
-		cmd := exec.Command("xdg-open", target)
-		return cmd.Run()
-	}
+	return opener.Reveal(target)
 }
 
 func (a *App) OpenDownloadedFile(filePath string) error {
@@ -168,20 +139,7 @@ func (a *App) OpenDownloadedFile(filePath string) error {
 	if target == "" {
 		return fmt.Errorf("ruta invalida")
 	}
-
-	switch runtime.GOOS {
-	case "windows":
-		target = filepath.Clean(target)
-		cmd := exec.Command("cmd", "/c", "start", "", target)
-		downloader.HideWindow(cmd)
-		return cmd.Start()
-	case "darwin":
-		cmd := exec.Command("open", target)
-		return cmd.Run()
-	default:
-		cmd := exec.Command("xdg-open", target)
-		return cmd.Run()
-	}
+	return opener.Open(target)
 }
 
 func (a *App) ForceUpdateYtdlp() (string, error) {

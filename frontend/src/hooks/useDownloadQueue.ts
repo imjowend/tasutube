@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Cancel, Download, GetQueue } from "../../wailsjs/go/main/App"
-import { EventsOn } from "../../wailsjs/runtime/runtime"
+import { Cancel, Download, EventsOn, GetQueue } from "../lib/wailsBridge"
 import type {
     DownloadFormat,
     DownloadItem,
@@ -24,6 +23,13 @@ export function useDownloadQueue() {
     // across re-renders, so list ordering doesn't shuffle.
     const createdAtRef = useRef<Map<number, number>>(new Map())
 
+    // Devuelve el createdAt estable del ítem, registrándolo la primera vez.
+    const createdAtFor = useCallback((id: number): number => {
+        const createdAt = createdAtRef.current.get(id) ?? Date.now()
+        createdAtRef.current.set(id, createdAt)
+        return createdAt
+    }, [])
+
     const upsert = useCallback(
         (id: number, patch: Partial<DownloadItemWithProgress>) => {
             setItems((prev) => {
@@ -39,9 +45,6 @@ export function useDownloadQueue() {
                         patch.quality !== undefined &&
                         patch.status !== undefined
                     ) {
-                        const createdAt =
-                            createdAtRef.current.get(id) ?? Date.now()
-                        createdAtRef.current.set(id, createdAt)
                         next.set(id, {
                             id,
                             url: patch.url,
@@ -50,7 +53,7 @@ export function useDownloadQueue() {
                             status: patch.status,
                             error: patch.error,
                             percent: patch.percent ?? 0,
-                            createdAt,
+                            createdAt: createdAtFor(id),
                         })
                     }
                     return next
@@ -60,7 +63,7 @@ export function useDownloadQueue() {
                 return next
             })
         },
-        [],
+        [createdAtFor],
     )
 
     // Hydrate from backend + subscribe to events. Run once.
@@ -74,20 +77,12 @@ export function useDownloadQueue() {
                     const next = new Map(prev)
                     queue.forEach((raw) => {
                         const item = raw as DownloadItem
-                        const createdAt =
-                            createdAtRef.current.get(item.id) ?? Date.now()
-                        createdAtRef.current.set(item.id, createdAt)
                         // Preserve any progress we may already have for this id.
                         const existing = next.get(item.id)
                         next.set(item.id, {
-                            id: item.id,
-                            url: item.url,
-                            format: item.format,
-                            quality: item.quality,
-                            status: item.status,
-                            error: item.error,
+                            ...item,
                             percent: existing?.percent ?? 0,
-                            createdAt,
+                            createdAt: createdAtFor(item.id),
                         })
                     })
                     return next
@@ -119,7 +114,7 @@ export function useDownloadQueue() {
             offStatus?.()
             offProgress?.()
         }
-    }, [upsert])
+    }, [upsert, createdAtFor])
 
     const enqueue = useCallback(
         async (

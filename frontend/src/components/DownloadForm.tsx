@@ -5,7 +5,11 @@ import {
     type DownloadFormat,
     type VideoMetadata,
 } from "../types"
-import { GetDownloadPath, GetVideoInfo, OpenFolder, OpenFolderDialog, SetDownloadPath } from "../lib/wailsBridge"
+import { useFolderPicker } from "../hooks/useFolderPicker"
+import { selectableClasses } from "../lib/ui"
+import { GetDownloadPath, GetVideoInfo } from "../lib/wailsBridge"
+import { isValidYoutubeUrl } from "../lib/youtube"
+import { FolderIcon, GearIcon } from "./icons"
 
 export type FormStatus =
     | {
@@ -34,10 +38,6 @@ interface DownloadFormProps {
     onQualityChange: (q: string) => void
 }
 
-function isValidYoutubeUrl(url: string): boolean {
-    return url.includes("youtube.com") || url.includes("youtu.be")
-}
-
 export function DownloadForm({
     url,
     onUrlChange,
@@ -57,8 +57,8 @@ export function DownloadForm({
 }: DownloadFormProps) {
     const [analyzedUrl, setAnalyzedUrl] = useState("")
     const [submitting, setSubmitting] = useState(false)
-    const [picking, setPicking] = useState(false)
     const [analyzing, setAnalyzing] = useState(false)
+    const { picking, pickFolder } = useFolderPicker(onPathChanged)
 
     const qualities = useMemo(
         () => (activeFormat === "mp3" ? MP3_QUALITIES : MP4_QUALITIES),
@@ -126,21 +126,6 @@ export function DownloadForm({
         }
     }
 
-    async function handlePickFolder() {
-        setPicking(true)
-        try {
-            const selected = await OpenFolderDialog()
-            if (selected) {
-                await SetDownloadPath(selected)
-                onPathChanged(selected)
-            }
-        } catch (err) {
-            console.error("[v0] OpenFolderDialog failed:", err)
-        } finally {
-            setPicking(false)
-        }
-    }
-
     // Is the currently selected quality a custom/advanced resolution (like 2160p or 1440p or custom bitrate)?
     const isCustomQualitySelected = useMemo(() => {
         if (activeFormat === "mp4") {
@@ -177,7 +162,7 @@ export function DownloadForm({
                     />
                     <button
                         type="button"
-                        onClick={handlePickFolder}
+                        onClick={pickFolder}
                         disabled={picking}
                         title="Elegir carpeta de destino"
                         className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 inline-flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -234,12 +219,10 @@ export function DownloadForm({
                                     role="radio"
                                     aria-checked={active}
                                     onClick={() => onFormatChange(fmt)}
-                                    className={
-                                        "px-5 py-2.5 rounded-xl text-sm font-bold border transition-all duration-150 active:scale-95 " +
-                                        (active
-                                            ? "bg-red-600 border-red-500 text-white shadow-lg"
-                                            : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white")
-                                    }
+                                    className={selectableClasses(
+                                        "px-5 py-2.5 rounded-xl text-sm font-bold border transition-all duration-150 active:scale-95",
+                                        { selected: active },
+                                    )}
                                 >
                                     {fmt.toUpperCase()}
                                 </button>
@@ -287,14 +270,10 @@ export function DownloadForm({
                                     disabled={isLocked}
                                     aria-checked={active}
                                     onClick={() => onQualityChange(q.value)}
-                                    className={
-                                        "px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all duration-150 active:scale-95 " +
-                                        (isLocked
-                                            ? "bg-zinc-800/40 border-zinc-800 text-zinc-600 cursor-not-allowed opacity-50"
-                                            : active
-                                              ? "bg-red-600 border-red-500 text-white shadow-lg"
-                                              : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white")
-                                    }
+                                    className={selectableClasses(
+                                        "px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all duration-150 active:scale-95",
+                                        { selected: active, disabled: isLocked },
+                                    )}
                                 >
                                     {q.label} {isLocked && "🔒"}
                                 </button>
@@ -363,35 +342,5 @@ export function DownloadForm({
                 </div>
             )}
         </div>
-    )
-}
-
-function FolderIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className={className}
-            aria-hidden="true"
-        >
-            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-        </svg>
-    )
-}
-
-function GearIcon({ className }: { className?: string }) {
-    return (
-        <svg
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className={className}
-            aria-hidden="true"
-        >
-            <path
-                fillRule="evenodd"
-                d="M8.34 1.804A1 1 0 019.32 1h1.36a1 1 0 01.98.804l.295 1.473a6.95 6.95 0 011.564.9l1.453-.387a1 1 0 011.054.461l.68 1.18a1 1 0 01-.157 1.143l-1.024 1.124a6.974 6.974 0 010 1.806l1.024 1.124a1 1 0 01.157 1.143l-.68 1.18a1 1 0 01-1.054.46l-1.453-.386a6.95 6.95 0 01-1.564.9l-.295 1.473A1 1 0 0110.68 19H9.32a1 1 0 01-.98-.804l-.295-1.473a6.95 6.95 0 01-1.564-.9l-1.453.386a1 1 0 01-1.054-.46l-.68-1.18a1 1 0 01.157-1.143L4.475 12.3a6.974 6.974 0 010-1.806L3.45 9.37a1 1 0 01-.157-1.143l.68-1.18a1 1 0 011.054-.46l1.453.386a6.95 6.95 0 011.564-.9l.295-1.473zM10 13a3 3 0 100-6 3 3 0 000 6z"
-                clipRule="evenodd"
-            />
-        </svg>
     )
 }

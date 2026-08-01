@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"tasutube/internal/proc"
+	"tasutube/internal/userpath"
 	"tasutube/internal/ytdlp"
 )
 
@@ -59,19 +60,16 @@ func FetchVideoMetadata(ctx context.Context, url string, ytdlpMgr *ytdlp.Manager
 	}
 	metaCacheMutex.Unlock()
 
-	ytdlpPath, err := ytdlpMgr.Resolve(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("no se pudo preparar yt-dlp: %w", err)
-	}
-
-	cmd := exec.CommandContext(ctx, ytdlpPath,
+	cmd, err := ytdlpCommand(ctx, ytdlpMgr,
 		"-J",
 		"--no-playlist",
 		"--socket-timeout", "5",
 		"--no-warnings",
 		url,
 	)
-	HideWindow(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo preparar yt-dlp: %w", err)
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -162,13 +160,10 @@ func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath
 		}
 	}
 
-	ytdlpPath, err := ytdlpMgr.Resolve(ctx)
+	cmd, err := ytdlpCommand(ctx, ytdlpMgr, args...)
 	if err != nil {
 		return DownloadResult{false, "No se pudo preparar yt-dlp. Revisá tu conexión a internet.", ""}
 	}
-
-	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
-	HideWindow(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -223,11 +218,19 @@ func getBaseDownloadPath(downloadPath string) string {
 	if downloadPath != "" {
 		return downloadPath
 	}
-	home, err := os.UserHomeDir()
+	return userpath.DownloadsDir()
+}
+
+// ytdlpCommand arma un comando de yt-dlp listo para ejecutar, resolviendo el
+// binario y ocultando la ventana de consola en Windows.
+func ytdlpCommand(ctx context.Context, ytdlpMgr *ytdlp.Manager, args ...string) (*exec.Cmd, error) {
+	ytdlpPath, err := ytdlpMgr.Resolve(ctx)
 	if err != nil {
-		return ""
+		return nil, err
 	}
-	return filepath.Join(home, "Downloads")
+	cmd := exec.CommandContext(ctx, ytdlpPath, args...)
+	proc.HideWindow(cmd)
+	return cmd, nil
 }
 
 // ExtractPercent parsea líneas como: [download]  45.3% of 10.00MiB at 1.23MiB/s ETA 00:05
@@ -275,9 +278,9 @@ func AudioQuality(quality string) string {
 }
 
 func DefaultDownloadPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	dir := userpath.DownloadsDir()
+	if dir == "" {
 		return "%(title)s.%(ext)s"
 	}
-	return filepath.Join(home, "Downloads", "%(title)s.%(ext)s")
+	return filepath.Join(dir, "%(title)s.%(ext)s")
 }
