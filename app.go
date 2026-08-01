@@ -55,10 +55,14 @@ type App struct {
 }
 
 func NewApp() *App {
+	return newAppWithYtdlp(ytdlp.NewManager())
+}
+
+func newAppWithYtdlp(mgr *ytdlp.Manager) *App {
 	a := &App{
 		jobs:    make(chan job, 10),
 		cancels: make(map[int]context.CancelFunc),
-		ytdlp:   ytdlp.NewManager(),
+		ytdlp:   mgr,
 	}
 	for i := 0; i < 3; i++ {
 		go a.worker()

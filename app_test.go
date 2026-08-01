@@ -5,7 +5,7 @@ import (
 )
 
 func TestAppQueueAndState(t *testing.T) {
-	app := NewApp()
+	app := newAppWithYtdlp(fakeYtdlp(t, "exit 0\n"))
 
 	// Initial queue should be empty
 	queue := app.GetQueue()
