@@ -60,12 +60,19 @@ func FetchVideoMetadata(ctx context.Context, url string, ytdlpMgr *ytdlp.Manager
 	}
 	metaCacheMutex.Unlock()
 
+	safeURL, err := ValidateURL(url)
+	if err != nil {
+		return nil, err
+	}
+
 	cmd, err := ytdlpCommand(ctx, ytdlpMgr,
+		"--ignore-config",
 		"-J",
 		"--no-playlist",
 		"--socket-timeout", "5",
 		"--no-warnings",
-		url,
+		"--",
+		safeURL,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("no se pudo preparar yt-dlp: %w", err)
@@ -160,21 +167,28 @@ type ProgressEmitter func(id int, percent float64)
 func RunDownload(ctx context.Context, id int, url, format, quality, downloadPath string, ytdlpMgr *ytdlp.Manager, emitProgress ProgressEmitter) DownloadResult {
 	var args []string
 
+	safeURL, err := ValidateURL(url)
+	if err != nil {
+		return DownloadResult{false, err.Error(), ""}
+	}
+
 	outputPath := getOutputPath(downloadPath)
 
 	if format == "mp3" {
 		args = []string{
+			"--ignore-config",
 			"--newline",
 			"-x", "--audio-format", "mp3", "--audio-quality", AudioQuality(quality),
 			"-o", outputPath,
-			url,
+			"--", safeURL,
 		}
 	} else {
 		args = []string{
+			"--ignore-config",
 			"--newline",
 			"-f", VideoFormat(quality), "--merge-output-format", "mp4",
 			"-o", outputPath,
-			url,
+			"--", safeURL,
 		}
 	}
 

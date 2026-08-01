@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"tasutube/internal/proc"
 	"tasutube/internal/ytdlp"
 	"testing"
 	"time"
@@ -298,7 +299,7 @@ func TestGetBaseDownloadPath(t *testing.T) {
 
 func TestHideWindowDoesNotBreakCommand(t *testing.T) {
 	cmd := exec.Command("echo", "hola")
-	HideWindow(cmd)
+	proc.HideWindow(cmd)
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run() error = %v; HideWindow no debería alterar el comando", err)
 	}

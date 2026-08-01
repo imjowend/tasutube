@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"tasutube/internal/autostart"
@@ -101,9 +102,11 @@ func (a *App) worker() {
 }
 
 func (a *App) Download(url string, format string, quality string) (int, error) {
-	if strings.TrimSpace(url) == "" {
-		return 0, fmt.Errorf("la URL está vacía")
+	safeURL, err := downloader.ValidateURL(url)
+	if err != nil {
+		return 0, err
 	}
+	url = safeURL
 	item := a.addItem(url, format, quality)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,6 +159,12 @@ func (a *App) OpenDownloadedFile(filePath string) error {
 	if target == "" {
 		return fmt.Errorf("ruta invalida")
 	}
+
+	fi, err := os.Stat(target)
+	if err != nil || fi.IsDir() {
+		return fmt.Errorf("ruta invalida")
+	}
+
 	return opener.Open(target)
 }
 
