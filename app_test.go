@@ -14,7 +14,10 @@ func TestAppQueueAndState(t *testing.T) {
 	}
 
 	// Enqueue an item
-	id := app.Download("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "mp3", "alta")
+	id, err := app.Download("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "mp3", "alta")
+	if err != nil {
+		t.Fatalf("Download() error = %v", err)
+	}
 	if id != 1 {
 		t.Errorf("First Download id = %d; want 1", id)
 	}
@@ -31,10 +34,39 @@ func TestAppQueueAndState(t *testing.T) {
 
 	// Test SetDownloadPath and GetDownloadPath
 	app.SetDownloadPath("/tmp/my-downloads")
-	if got := app.GetDownloadPath(); got != "/tmp/my-downloads" {
+	got, err := app.GetDownloadPath()
+	if err != nil {
+		t.Fatalf("GetDownloadPath() error = %v", err)
+	}
+	if got != "/tmp/my-downloads" {
 		t.Errorf("GetDownloadPath() = %q; want /tmp/my-downloads", got)
 	}
 
 	// Test Cancel
-	app.Cancel(1)
+	if err := app.Cancel(1); err != nil {
+		t.Logf("Cancel(1) returned: %v", err)
+	}
+}
+
+func TestDownloadRejectsEmptyURL(t *testing.T) {
+	app := NewApp()
+
+	id, err := app.Download("   ", "mp3", "alta")
+	if err == nil {
+		t.Fatal("Download(\"   \") error = nil; want an error")
+	}
+	if id != 0 {
+		t.Errorf("Download(\"   \") id = %d; want 0", id)
+	}
+	if n := len(app.GetQueue()); n != 0 {
+		t.Errorf("Queue len = %d; want 0", n)
+	}
+}
+
+func TestCancelUnknownIDReturnsError(t *testing.T) {
+	app := NewApp()
+
+	if err := app.Cancel(999); err == nil {
+		t.Error("Cancel(999) error = nil; want an error")
+	}
 }
